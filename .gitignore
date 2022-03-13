@@ -1,1 +1,3 @@
 **/voxceleb*mislabel.json
+*.pyc
+voxceleb*mislabel*.json
