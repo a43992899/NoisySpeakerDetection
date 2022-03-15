@@ -43,7 +43,7 @@ class SpeakerDatasetPreprocessed(Dataset):
         self.shuffle=shuffle
         self.utter_start = utter_start
         self.label_dict = label_dict
-        with open("voxceleb2_20%_mislabel.json", "r") as f:
+        with open("voxceleb2_20__mislabel.json", "r") as f:
             self.mislabel_dict = json.load(f)
         
     def __len__(self):

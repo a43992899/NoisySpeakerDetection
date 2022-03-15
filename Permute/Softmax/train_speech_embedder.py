@@ -7,6 +7,7 @@ Created on Wed Sep  5 21:49:16 2018
 """
 
 import os
+os.chdir(os.path.dirname(os.path.abspath(__file__))) # change to current file path
 import random
 import time
 import torch
@@ -161,7 +162,7 @@ if __name__=="__main__":
     if hp.training:
         train(hp.model.model_path)
     else:
-        path = "/media/mnpham/Hard Disk 3/SpeakerClassification/models/Mislabel00%"
+        path = "/home/yrb/code/speechbrain/data/models/Permute/Softmax/Mislabel20%"
         for model_path in os.listdir(path):
            if(model_path.endswith(".pth")):
                print(model_path)
