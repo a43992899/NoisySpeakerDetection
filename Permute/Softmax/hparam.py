@@ -2,11 +2,11 @@
 #!/usr/bin/env python
 
 import yaml
-
+from yaml import Loader
 
 def load_hparam(filename):
     stream = open(filename, 'r')
-    docs = yaml.load_all(stream)
+    docs = yaml.load_all(stream, Loader=Loader)
     hparam_dict = dict()
     for doc in docs:
         for k, v in doc.items():
@@ -46,7 +46,7 @@ class Dotdict(dict):
 
 class Hparam(Dotdict):
 
-    def __init__(self, file='config/config.yaml'):
+    def __init__(self, file='Permute/Softmax/config/config.yaml'):
         super(Dotdict, self).__init__()
         hp_dict = load_hparam(file)
         hp_dotdict = Dotdict(hp_dict)

@@ -13,23 +13,26 @@ from random import shuffle
 import torch
 from torch.utils.data import Dataset
 
-from hparam import hparam as hp
+# from hparam import hparam as hp
 from utils import mfccs_and_spec
 import time, json
 
 class SpeakerDatasetPreprocessedTest(Dataset):
     
-    def __init__(self, shuffle=True, utter_start=0):
+    def __init__(self, file_list, utter_num=5, shuffle=True, utter_start=0):
         
         # data path
-        if hp.training:
-            print(hp.data.train_path)
-            self.path = hp.data.train_path
-            self.utter_num = hp.train.M
-        else:
-            self.path = hp.data.test_path
-            self.utter_num = hp.test.M
-        self.file_list = os.listdir(self.path)
+        # if hp.training:
+        #     print(hp.data.train_path)
+        #     self.path = hp.data.train_path
+        #     self.utter_num = hp.train.M
+        # else:
+        #     self.path = hp.data.test_path
+        #     self.utter_num = hp.test.M
+
+
+        self.utter_num = utter_num
+        self.file_list = file_list
         
         random.seed(time.time())
         random.shuffle(self.file_list)
@@ -50,7 +53,7 @@ class SpeakerDatasetPreprocessedTest(Dataset):
         else:
             selected_file = np_file_list[idx]               
             
-        utters = np.load(os.path.join(self.path, selected_file))        # load utterance spectrogram of selected speaker
+        utters = np.load(selected_file)        # load utterance spectrogram of selected speaker
         if self.shuffle:
             utter_index = np.random.randint(0, utters.shape[0], self.utter_num)   # select M utterances per speaker
             utterance = utters[utter_index]  

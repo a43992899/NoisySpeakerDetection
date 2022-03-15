@@ -25,16 +25,17 @@ def relabel(selected_file, utter_index, mislabel_dict):
 
 class SpeakerDatasetPreprocessed(Dataset):
     
-    def __init__(self, label_dict, shuffle=True, utter_start=0):
+    def __init__(self, file_list, label_dict, shuffle=True, utter_start=0):
         
         # data path
-        if hp.training:
-            self.path = hp.data.train_path
-            self.utter_num = 1
-        else:
-            self.path = hp.data.test_path
-            self.utter_num = hp.test.M
-        self.file_list = os.listdir(self.path)
+        # if hp.training:
+        #     self.path = hp.data.train_path
+        #     self.utter_num = 1
+        # else:
+        #     self.path = hp.data.test_path
+        #     self.utter_num = hp.test.M
+        
+        self.file_list = file_list
 
         random.seed(time.time())
         random.shuffle(self.file_list)

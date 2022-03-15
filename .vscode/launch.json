@@ -5,14 +5,10 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "args": [
-                "/home/yrb/code/speechbrain/recipes/CommonLanguage/lang_id/hparams/train_ecapa_tdnn.yaml",
-                "--data_folder=/home/yrb/code/speechbrain/data/common_voice_kpd/"
-            ],
-            "name": "Python: Current File",
+            "name": "Test",
             "type": "python",
             "request": "launch",
-            "program": "${file}",
+            "program": "Permute/Softmax/test.py",
             "console": "integratedTerminal",
         }
     ]
