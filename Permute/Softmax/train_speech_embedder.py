@@ -39,14 +39,14 @@ def train(model_path):
     
     train_dataset = SpeakerDatasetPreprocessed(label_dict=train_dict)
 
-    train_loader = DataLoader(train_dataset, batch_size=hp.train.N, shuffle=False, num_workers=0, drop_last=True) 
+    train_loader = DataLoader(train_dataset, batch_size=hp.train.N, shuffle=True, num_workers=hp.train.num_workers, drop_last=True, pin_memory=True)
     
     embedder_net = SpeechEmbedder(num_classes=len(train_speakers)).to(device)
     if hp.train.restore:
         embedder_net.load_state_dict(torch.load(model_path))
 
     #Both net and loss have trainable parameters
-    optimizer = torch.optim.SGD(embedder_net.parameters(), lr=hp.train.lr)
+    optimizer = torch.optim.Adam(embedder_net.parameters(), lr=hp.train.lr)
     
     # criterion = nn.CrossEntropyLoss()
     criterion = nn.NLLLoss()
@@ -158,13 +158,39 @@ def test(model_path):
     thresh = interp1d(fpr, thresholds)(eer)
     print(eer, thresh)
 
+def test_loader_speed():
+    #Get label dict
+    train_speakers = os.listdir(hp.data.train_path)
+    train_dict = {}
+    for i in range(len(train_speakers)):
+        train_dict[train_speakers[i][:-4]] = i
+
+    device = torch.device(hp.device)
+    
+    for num_workers in range(0,50,5):
+        train_dataset = SpeakerDatasetPreprocessed(label_dict=train_dict)
+
+        train_loader = DataLoader(train_dataset, batch_size=hp.train.N, shuffle=True, num_workers=hp.train.num_workers, drop_last=True, pin_memory=True)
+    
+        iteration = 0
+        start = time.time()
+        for e in range(5):
+            for batch_id, (mel_db_batch, labels) in enumerate(train_loader):
+                print(batch_id)
+                pass
+        end = time.time()
+        print("Finish with:{} second, num_workers={}".format(end-start,num_workers))
+
 if __name__=="__main__":
-    if hp.training:
-        train(hp.model.model_path)
+    if hp.train.test_loader_speed:
+        test_loader_speed()
     else:
-        path = "/home/yrb/code/speechbrain/data/models/Permute/Softmax/Mislabel20%"
-        for model_path in os.listdir(path):
-           if(model_path.endswith(".pth")):
-               print(model_path)
-               test(os.path.join(path, model_path))
-   
+        if hp.training:
+            train(hp.model.model_path)
+        else:
+            path = "/home/yrb/code/speechbrain/data/models/Permute/Softmax/Mislabel20%"
+            for model_path in os.listdir(path):
+                if(model_path.endswith(".pth")):
+                    print(model_path)
+                    test(os.path.join(path, model_path))
+    

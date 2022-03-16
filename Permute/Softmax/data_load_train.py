@@ -19,13 +19,11 @@ import time, json
 
 def relabel(selected_file, utter_index, mislabel_dict):
     key = selected_file + "_{}".format(utter_index)
-    if(key in mislabel_dict):
-        return mislabel_dict[key]
-    return None
+    return mislabel_dict.get(key, None)
 
 class SpeakerDatasetPreprocessed(Dataset):
     
-    def __init__(self, label_dict, shuffle=True, utter_start=0):
+    def __init__(self, label_dict, shuffle=False, utter_start=0):
         
         # data path
         if hp.training:
@@ -43,35 +41,26 @@ class SpeakerDatasetPreprocessed(Dataset):
         self.shuffle=shuffle
         self.utter_start = utter_start
         self.label_dict = label_dict
-        with open("voxceleb2_20__mislabel.json", "r") as f:
+        with open("voxceleb2_20%_mislabel.json", "r") as f:
             self.mislabel_dict = json.load(f)
         
     def __len__(self):
         return self.length
 
     def __getitem__(self, idx):
-        np_file_list = self.file_list
-        
-
-        if self.shuffle:
-            random.seed(time.time())
-            selected_file = random.sample(np_file_list, 1)[0]  # select random speaker
-        else:
-            selected_file = np_file_list[idx]               
+        selected_file = self.file_list[idx]               
             
         utters = np.load(os.path.join(self.path, selected_file))        # load utterance spectrogram of selected speaker
-        if self.shuffle:
-            utter_index = np.random.randint(0, utters.shape[0], self.utter_num)   # select M utterances per speaker
-            utterance = utters[utter_index]  
-        else:
-            utterance = utters[self.utter_start: self.utter_start+self.utter_num] # utterances of a speaker [batch(M), n_mels, frames]
+
+        utter_index = np.random.randint(0, utters.shape[0], self.utter_num)   # select M utterances per speaker
+        utterance = utters[utter_index]  
         
         packet = relabel(selected_file[:-4], utter_index[0], self.mislabel_dict)
 
         if(packet is None): #non corrupted case
             label = self.label_dict[selected_file[:-4]]
         else:            
-            label = self.label_dict[packet[0]]
+            label = self.label_dict[packet]
 
         label = self.label_dict[selected_file[:-4]]
 

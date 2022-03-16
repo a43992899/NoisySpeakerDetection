@@ -27,14 +27,15 @@ model:
 train:
     N : 64 #Number of speakers in batch
     M : 5 #Number of utterances per speaker
-    num_workers: 8 #number of workers for dataloader
-    lr: 0.01 
+    num_workers: 2 #number of workers for dataloader
+    lr: 0.0001 
     epochs: 1000 #Max training speaker epoch 
     log_interval: 20 #Epochs before printing progress
     log_file: '/home/yrb/code/speechbrain/data/models/Permute/Softmax/SoftmaxExperiment7/Chance=0.1/Stats'
     checkpoint_interval: 20 #Save model after x speaker epochs
     checkpoint_dir: '/home/yrb/code/speechbrain/data/models/Permute/Softmax/SoftmaxExperiment7/Chance=0.1'
     restore: !!bool "false" #Resume training from previous model path
+    test_loader_speed: !!bool "true"
 ---
 test:
     N : 10 #Number of speakers in batch

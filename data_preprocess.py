@@ -18,10 +18,10 @@ warnings.filterwarnings("ignore")
 def save_spectrogram_tisv(speaker_path, data_train_path):
     
     utter_min_len = (hp.data.tisv_frame * hp.data.hop + hp.data.window) * hp.data.sr    # lower bound of utterance length
-    total_speaker_num = len(os.listdir(speaker_path))
-    train_speaker_num= (total_speaker_num//10)*9            # split total data 90% train and 10% test
-    print("total speaker number : %d"%total_speaker_num)
-    print("train : %d, test : %d"%(train_speaker_num, total_speaker_num-train_speaker_num))
+    # total_speaker_num = len(os.listdir(speaker_path))
+    # train_speaker_num= (total_speaker_num//10)*9            # split total data 90% train and 10% test
+    # print("total speaker number : %d"%total_speaker_num)
+    # print("train : %d, test : %d"%(train_speaker_num, total_speaker_num-train_speaker_num))
     for i, folder in enumerate(tqdm(os.listdir(speaker_path))):
         # print(folder)
         # print("%dth speaker processing..."%i)
