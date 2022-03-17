@@ -3,7 +3,7 @@ device: "cuda"
 unprocessed_data: '/home/lizeqian/data4t/database_minh/*/*.wav'
 ---
 data:
-    train_path: '/home/yrb/code/speechbrain/data/voxceleb/vox2/spmel'  #'/media/mnpham/Hard Disk 3/WPI Research Data/ReversedPredictionData'
+    train_path: '/home/yrb/code/speechbrain/data/voxceleb/vox2/spmel_single'  #'/media/mnpham/Hard Disk 3/WPI Research Data/ReversedPredictionData'
     train_path_unprocessed: '/home/yrb/code/speechbrain/data/voxceleb/vox2/aac'
     # test_path: '/home/yrb/code/speechbrain/data/test_tisv'
     # test_path_unprocessed: '/media/mnpham/Hard Disk 2/TIMIT/data/lisa/data/timit/raw/TIMIT/TRAIN_SORTED/*'
@@ -27,15 +27,15 @@ model:
 train:
     N : 64 #Number of speakers in batch
     M : 5 #Number of utterances per speaker
-    num_workers: 2 #number of workers for dataloader
+    num_workers: 12 #number of workers for dataloader
     lr: 0.0001 
-    epochs: 1000 #Max training speaker epoch 
+    epochs: 400 #Max training speaker epoch 
     log_interval: 20 #Epochs before printing progress
     log_file: '/home/yrb/code/speechbrain/data/models/Permute/Softmax/SoftmaxExperiment7/Chance=0.1/Stats'
     checkpoint_interval: 20 #Save model after x speaker epochs
     checkpoint_dir: '/home/yrb/code/speechbrain/data/models/Permute/Softmax/SoftmaxExperiment7/Chance=0.1'
     restore: !!bool "false" #Resume training from previous model path
-    test_loader_speed: !!bool "true"
+    test_loader_speed: !!bool "false"
 ---
 test:
     N : 10 #Number of speakers in batch

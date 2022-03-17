@@ -30,7 +30,8 @@ np.random.seed(1)
 def train(model_path):
 
     #Get label dict
-    train_speakers = os.listdir(hp.data.train_path)
+    train_speakers = os.listdir(hp.data.train_path.replace('_single',''))
+    train_speakers.sort()
     train_dict = {}
     for i in range(len(train_speakers)):
         train_dict[train_speakers[i][:-4]] = i
@@ -60,8 +61,8 @@ def train(model_path):
         total_loss = 0
         for batch_id, (mel_db_batch, labels) in enumerate(train_loader):
 
-            mel_db_batch = mel_db_batch.to(device)
-            labels = labels.to(device)
+            mel_db_batch = mel_db_batch.to(device, non_blocking=True)
+            labels = labels.to(device, non_blocking=True)
             
             #gradient accumulates
             optimizer.zero_grad()
@@ -160,26 +161,25 @@ def test(model_path):
 
 def test_loader_speed():
     #Get label dict
-    train_speakers = os.listdir(hp.data.train_path)
+    train_speakers = os.listdir(hp.data.train_path.replace('_single',''))
+    train_speakers.sort()
     train_dict = {}
     for i in range(len(train_speakers)):
         train_dict[train_speakers[i][:-4]] = i
-
-    device = torch.device(hp.device)
     
-    for num_workers in range(0,50,5):
-        train_dataset = SpeakerDatasetPreprocessed(label_dict=train_dict)
+    train_dataset = SpeakerDatasetPreprocessed(label_dict=train_dict)
 
-        train_loader = DataLoader(train_dataset, batch_size=hp.train.N, shuffle=True, num_workers=hp.train.num_workers, drop_last=True, pin_memory=True)
-    
-        iteration = 0
-        start = time.time()
-        for e in range(5):
-            for batch_id, (mel_db_batch, labels) in enumerate(train_loader):
-                print(batch_id)
-                pass
-        end = time.time()
-        print("Finish with:{} second, num_workers={}".format(end-start,num_workers))
+    train_loader = DataLoader(train_dataset, batch_size=hp.train.N, shuffle=True, num_workers=hp.train.num_workers, drop_last=True, pin_memory=True)
+
+    iteration = 0
+    start = time.time()
+    for e in range(5):
+        batch_start = time.time()
+        for batch_id, (mel_db_batch, labels) in enumerate(train_loader):
+            avg_time_elapsed = (time.time() - batch_start) / (batch_id + 1)
+            print(avg_time_elapsed)
+    end = time.time()
+    print("Finish with:{} second, num_workers={}".format(end-start,hp.train.num_workers))
 
 if __name__=="__main__":
     if hp.train.test_loader_speed:
