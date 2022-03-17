@@ -95,8 +95,7 @@ def train(model_path):
 def test(model_path):
 
     #Get label dict
-    train_num_classes = len(os.listdir(hp.data.train_path))
-    # train_num_classes = 2000
+    train_num_classes = len(os.listdir(hp.data.train_path.replace('_single','')))
 
     device = torch.device(hp.device)
     random.seed(0)
@@ -188,7 +187,7 @@ if __name__=="__main__":
         if hp.training:
             train(hp.model.model_path)
         else:
-            path = "/home/yrb/code/speechbrain/data/models/Permute/Softmax/Mislabel20%"
+            path = "/home/yrb/code/speechbrain/data/models/Permute/Softmax/SoftmaxExperiment1/Chance=0.2"
             for model_path in os.listdir(path):
                 if(model_path.endswith(".pth")):
                     print(model_path)

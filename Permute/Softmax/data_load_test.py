@@ -19,7 +19,7 @@ import time, json
 
 class SpeakerDatasetPreprocessedTest(Dataset):
     
-    def __init__(self, shuffle=True, utter_start=0):
+    def __init__(self, shuffle=False, utter_start=0):
         
         # data path
         if hp.training:
@@ -44,18 +44,11 @@ class SpeakerDatasetPreprocessedTest(Dataset):
     def __getitem__(self, idx):
         np_file_list = self.file_list
 
-        if self.shuffle:
-            random.seed(time.time())
-            selected_file = random.sample(np_file_list, 1)[0]  # select random speaker
-        else:
-            selected_file = np_file_list[idx]               
+        selected_file = np_file_list[idx]               
             
         utters = np.load(os.path.join(self.path, selected_file))        # load utterance spectrogram of selected speaker
-        if self.shuffle:
-            utter_index = np.random.randint(0, utters.shape[0], self.utter_num)   # select M utterances per speaker
-            utterance = utters[utter_index]  
-        else:
-            utterance = utters[self.utter_start: self.utter_start+self.utter_num] # utterances of a speaker [batch(M), n_mels, frames]
+        
+        utterance = utters[self.utter_start: self.utter_start+self.utter_num] # utterances of a speaker [batch(M), n_mels, frames]
 
         utterance = utterance[:,:,:160]               # TODO implement variable length batch size
 

@@ -1,4 +1,4 @@
-training: !!bool "true"
+training: !!bool "false"
 device: "cuda"
 unprocessed_data: '/home/lizeqian/data4t/database_minh/*/*.wav'
 ---
@@ -29,10 +29,10 @@ train:
     M : 5 #Number of utterances per speaker
     num_workers: 12 #number of workers for dataloader
     lr: 0.0001 
-    epochs: 400 #Max training speaker epoch 
+    epochs: 10 #Max training speaker epoch 
     log_interval: 20 #Epochs before printing progress
     log_file: '/home/yrb/code/speechbrain/data/models/Permute/Softmax/SoftmaxExperiment1/Chance=0.2/Stats'
-    checkpoint_interval: 2 #Save model after x speaker epochs
+    checkpoint_interval: 1 #Save model after x speaker epochs
     checkpoint_dir: '/home/yrb/code/speechbrain/data/models/Permute/Softmax/SoftmaxExperiment1/Chance=0.2'
     restore: !!bool "false" #Resume training from previous model path
     test_loader_speed: !!bool "false"
