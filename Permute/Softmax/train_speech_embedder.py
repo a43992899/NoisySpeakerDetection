@@ -26,8 +26,13 @@ from torch.autograd import Variable
 
 random.seed(1)
 np.random.seed(1)
+writer = SummaryWriter(hp.train.log_dir)
 
 def train(model_path):
+
+    # copy config file to log_dir
+    import shutil
+    shutil.copy('config/config.yaml', hp.train.log_dir)
 
     #Get label dict
     train_speakers = os.listdir(hp.data.train_path.replace('_single',''))
@@ -47,7 +52,12 @@ def train(model_path):
         embedder_net.load_state_dict(torch.load(model_path))
 
     #Both net and loss have trainable parameters
-    optimizer = torch.optim.Adam(embedder_net.parameters(), lr=hp.train.lr)
+    if hp.train.optimizer == 'Adam':
+        optimizer = torch.optim.Adam(embedder_net.parameters(), lr=hp.train.lr)
+    elif hp.train.optimizer == 'SGD':
+        optimizer = torch.optim.SGD(embedder_net.parameters(), lr=hp.train.lr, momentum=0.9, weight_decay=5e-4)
+    else:
+        raise ValueError('Unknown optimizer')
     
     # criterion = nn.CrossEntropyLoss()
     criterion = nn.NLLLoss()
@@ -83,6 +93,7 @@ def train(model_path):
             if (batch_id + 1) % hp.train.log_interval == 0:
                 mesg = "{0}\tEpoch:{1}[{2}/{3}],Iteration:{4}\tLoss:{5:.4f}\tTLoss:{6:.4f}\t\n".format(time.ctime(), e+1,
                         batch_id+1, len(train_dataset)//hp.train.N, iteration,loss, total_loss / (batch_id + 1))
+                writer.add_scalar('Loss/train', loss, iteration)
                 print(mesg)
                     
         if hp.train.checkpoint_dir is not None and (e + 1) % hp.train.checkpoint_interval == 0:
