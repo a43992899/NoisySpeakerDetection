@@ -3,7 +3,7 @@ device: "cuda"
 unprocessed_data: '/home/lizeqian/data4t/database_minh/*/*.wav'
 ---
 data:
-    train_path: '/home/yrb/code/speechbrain/data/voxceleb/vox2/spmel_single'  #'/media/mnpham/Hard Disk 3/WPI Research Data/ReversedPredictionData'
+    train_path: '/home/yrb/code/speechbrain/data/voxceleb/vox2/spmel_single'
     train_path_unprocessed: '/home/yrb/code/speechbrain/data/voxceleb/vox2/aac'
     # test_path: '/home/yrb/code/speechbrain/data/test_tisv'
     # test_path_unprocessed: '/media/mnpham/Hard Disk 2/TIMIT/data/lisa/data/timit/raw/TIMIT/TRAIN_SORTED/*'
@@ -21,8 +21,7 @@ model:
     proj: 256 #Embedding sizes
     
     model_path: '/home/yrb/code/speechbrain/data/models/Permute/Softmax/SoftmaxExperiment7/final.model'
-    # model_path: "./speech_id_checkpoint/VoxCeleb2_2/final_epoch_400_batch_id_1498.model"
-    #model_path: './speech_id_checkpoint/VoxCeleb2_BookTubeSpeech_ver1/ckpt_epoch_160_batch_id_3245.pth' #'speech_id_checkpoint/final_epoch_100_batch_id_1498.model' #Model path for testing, inference, or resuming training
+    # Model path for testing, inference, or resuming training
 ---
 train:
     N : 64 #Number of speakers in batch

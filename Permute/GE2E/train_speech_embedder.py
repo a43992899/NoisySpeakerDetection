@@ -7,6 +7,7 @@ Created on Wed Sep  5 21:49:16 2018
 """
 
 import os
+os.chdir(os.path.dirname(os.path.abspath(__file__))) # change to current file path
 import random
 import time
 import torch
@@ -38,7 +39,7 @@ def train(model_path):
     
     train_dataset = SpeakerDatasetPreprocessed()
 
-    train_loader = DataLoader(train_dataset, batch_size=hp.train.N, shuffle=False, num_workers=0, drop_last=True) 
+    train_loader = DataLoader(train_dataset, batch_size=hp.train.N, shuffle=False, num_workers=hp.train.num_workers, drop_last=True, pin_memory=True) 
     
     embedder_net = SpeechEmbedder().to(device)
 
@@ -57,13 +58,14 @@ def train(model_path):
     for e in range(hp.train.epochs):
         total_loss = 0
         for batch_id, mel_db_batch in enumerate(train_loader): 
-            mel_db_batch = mel_db_batch.to(device)
+            mel_db_batch = mel_db_batch.to(device, non_blocking=True)
 
             mel_db_batch = torch.reshape(mel_db_batch, (hp.train.N*hp.train.M, mel_db_batch.size(2), mel_db_batch.size(3)))
-            perm = random.sample(range(0, hp.train.N*hp.train.M), hp.train.N*hp.train.M)
-            unperm = list(perm)
-            for i,j in enumerate(perm):
-                unperm[j] = i
+
+            # random permute the batch
+            perm = torch.randperm(hp.train.N*hp.train.M)
+            unperm = torch.argsort(perm)
+
             mel_db_batch = mel_db_batch[perm]
             #gradient accumulates
             optimizer.zero_grad()
@@ -168,9 +170,9 @@ def test(model_path):
 
 if __name__=="__main__":
     if hp.training:
-        print("Train Merge Experiment")
+        print("Train Permute Experiment")
         train(hp.model.model_path)
     else:
-        print("Test Merge Experiment")
+        print("Test Permute Experiment")
         path = "/media/mnpham/HARD_DISK_3/VoxCelebCorrupted/Experiment2/Duplicate=2&Chance=0.5/ckpt_epoch_20_batch_id_1498.pth"
         test(path)
