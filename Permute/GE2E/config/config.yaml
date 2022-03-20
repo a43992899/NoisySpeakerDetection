@@ -16,8 +16,9 @@ model:
     hidden: 768 #Number of LSTM hidden layer units
     num_layer: 3 #Number of LSTM layers
     proj: 256 #Embedding sizes
-    model_path: '/home/yrb/code/speechbrain/data/models/Permute/Softmax/SoftmaxExperiment1/Chance=0.2/ckpt_epoch_10_batch_id_45598.pth'
-    #'/home/yrb/code/speechbrain/data/models/Permute/GE2E/exp3/Chance=0.2/ckpt_epoch_40.pth'
+    model_path: '/home/yrb/code/speechbrain/data/models/Permute/GE2E/exp3/Chance=0.2/ckpt_epoch_80.pth'
+    # '/home/yrb/code/speechbrain/data/models/Permute/Softmax/SoftmaxExperiment1/Chance=0.2/ckpt_epoch_2_batch_id_45598.pth'
+    # '/home/yrb/code/speechbrain/data/models/Permute/GE2E/exp3/Chance=0.2/ckpt_epoch_80.pth'
 ---
 train:
     debug: !!bool "true"
