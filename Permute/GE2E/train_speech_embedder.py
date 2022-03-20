@@ -15,7 +15,7 @@ from torch.utils.data import DataLoader
 import torch.nn.functional as F
 from hparam import hparam as hp
 from data_load import SpeakerDatasetPreprocessed
-from speech_embedder_net import SpeechEmbedder, GE2ELoss, GE2ELoss_, get_centroids, get_cossim
+from speech_embedder_net import SpeechEmbedder, SpeechEmbedder_Softmax, GE2ELoss, GE2ELoss_, get_centroids, get_cossim
 from torch.utils.tensorboard import SummaryWriter
 from scipy.optimize import brentq
 from scipy.interpolate import interp1d
@@ -24,6 +24,8 @@ import numpy as np
 from numpy.linalg import solve
 import scipy.linalg
 import scipy.stats
+from tqdm import tqdm
+from utils import compute_eer
 
 random.seed(1)
 np.random.seed(1)
@@ -36,9 +38,10 @@ def get_n_params(model):
 
 def train(model_path):
     # create log
-    os.makedirs(hp.train.checkpoint_dir, exist_ok=True)
-    writer = SummaryWriter(hp.train.log_dir)
-    shutil.copy('config/config.yaml', hp.train.log_dir)
+    if not hp.train.debug:
+        os.makedirs(hp.train.checkpoint_dir, exist_ok=True)
+        writer = SummaryWriter(hp.train.log_dir)
+        shutil.copy('config/config.yaml', hp.train.log_dir)
 
     # init
     device = torch.device(hp.device)
@@ -123,8 +126,12 @@ def test(model_path):
 
     test_loader = DataLoader(test_dataset, batch_size=hp.test.N, shuffle=True, num_workers=hp.test.num_workers, drop_last=True)
     
-    embedder_net = SpeechEmbedder().to(device)
-    embedder_net.load_state_dict(torch.load(model_path))
+    try:
+        embedder_net = SpeechEmbedder().to(device)
+        embedder_net.load_state_dict(torch.load(model_path))
+    except:
+        embedder_net = SpeechEmbedder_Softmax(num_classes=5994).to(device)
+        embedder_net.load_state_dict(torch.load(model_path))
     embedder_net.eval()
 
     print("Number of params: ", get_n_params(embedder_net))
@@ -136,7 +143,7 @@ def test(model_path):
 
     for e in range(hp.test.epochs):
         batch_avg_EER = 0
-        for batch_id, mel_db_batch in enumerate(test_loader):
+        for batch_id, mel_db_batch in enumerate(tqdm(test_loader)):
             
             assert hp.test.M % 2 == 0
             mel_db_batch = mel_db_batch.to(device)
@@ -144,14 +151,17 @@ def test(model_path):
             enrollment_batch = torch.reshape(enrollment_batch, (hp.test.N*hp.test.M//2, enrollment_batch.size(2), enrollment_batch.size(3)))
             verification_batch = torch.reshape(verification_batch, (hp.test.N*hp.test.M//2, verification_batch.size(2), verification_batch.size(3)))
             
-            perm = random.sample(range(0,verification_batch.size(0)), verification_batch.size(0))
-            unperm = list(perm)
-            for i,j in enumerate(perm):
-                unperm[j] = i
+            perm = torch.randperm(verification_batch.size(0))
+            unperm = torch.argsort(perm)
                 
             verification_batch = verification_batch[perm]
-            enrollment_embeddings = embedder_net(enrollment_batch)
-            verification_embeddings = embedder_net(verification_batch)
+            # get embedder_net attribute
+            if embedder_net.__class__.__name__ == 'SpeechEmbedder_Softmax':
+                enrollment_embeddings = embedder_net.get_embedding(enrollment_batch)
+                verification_embeddings = embedder_net.get_embedding(verification_batch)
+            else:
+                enrollment_embeddings = embedder_net(enrollment_batch)
+                verification_embeddings = embedder_net(verification_batch)
 
             verification_embeddings = verification_embeddings[unperm]
             
@@ -170,14 +180,9 @@ def test(model_path):
                 truth[i, i%10] = 1
             ypreds.append(sim_mat.flatten())
             ylabels.append(truth.flatten())
-    ypreds = np.concatenate(ypreds)
-    ylabels = np.concatenate(ylabels)
 
-    fpr, tpr, thresholds = roc_curve(ylabels, ypreds, pos_label=1)
-
-    eer = brentq(lambda x : 1. - x - interp1d(fpr, tpr)(x), 0., 1.)
-    thresh = interp1d(fpr, thresholds)(eer)
-    print(eer, thresh)
+        eer, thresh = compute_eer(ypreds, ylabels)
+        print("eer:", eer, "threshold:", thresh)
 
 if __name__=="__main__":
     if hp.training:
@@ -185,5 +190,5 @@ if __name__=="__main__":
         train(hp.model.model_path)
     else:
         print("Test Permute Experiment")
-        path = "/media/mnpham/HARD_DISK_3/VoxCelebCorrupted/Experiment2/Duplicate=2&Chance=0.5/ckpt_epoch_20_batch_id_1498.pth"
-        test(path)
+        print("Model path:", hp.model.model_path)
+        test(hp.model.model_path)

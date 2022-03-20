@@ -3,8 +3,8 @@
 #Modified from https://github.com/JanhHyun/Speaker_Verification
 import os, sys, glob
 # set current working directory
-os.chdir('/home/yrb/code/speechbrain/recipes/VoxCeleb/NoisySpeakerDet/xvector/Split/')
-sys.path.append('/home/yrb/code/speechbrain/recipes/VoxCeleb/NoisySpeakerDet/xvector/Split/')
+os.chdir('/home/yrb/code/speechbrain/Permute/GE2E')
+sys.path.append('/home/yrb/code/speechbrain/Permute/GE2E')
 
 import librosa
 import numpy as np
@@ -49,4 +49,5 @@ def save_spectrogram_tisv(speaker_path, data_train_path):
         np.save(os.path.join(data_train_path, "{}.npy".format(folder)), utterances_spec)
 
 if __name__ == "__main__":
-    save_spectrogram_tisv("/home/yrb/code/speechbrain/data/voxceleb/vox2/aac","/home/yrb/code/speechbrain/data/voxceleb/vox2/spmel")
+    # save_spectrogram_tisv("/home/yrb/code/speechbrain/data/voxceleb/vox2/aac","/home/yrb/code/speechbrain/data/voxceleb/vox2/spmel")
+    save_spectrogram_tisv("/home/yrb/code/speechbrain/data/voxceleb/vox1_test/wav","/home/yrb/code/speechbrain/data/voxceleb/vox1_test/spmel")

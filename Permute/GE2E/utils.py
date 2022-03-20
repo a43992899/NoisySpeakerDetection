@@ -9,6 +9,9 @@ import numpy as np
 import torch
 import torch.autograd as grad
 import torch.nn.functional as F
+from scipy.optimize import brentq
+from scipy.interpolate import interp1d
+from sklearn.metrics import roc_curve
 
 from hparam import hparam as hp
 
@@ -94,6 +97,16 @@ def mfccs_and_spec(wav_file, wav_process = False, calc_mfccs=False, calc_mag_db=
         mfccs = np.dot(librosa.filters.dct(40, mel_db.shape[0]), mel_db).T
     
     return mfccs, mel_db, mag_db
+
+def compute_eer(ypreds, ylabels):
+    ypreds = np.concatenate(ypreds)
+    ylabels = np.concatenate(ylabels)
+
+    fpr, tpr, thresholds = roc_curve(ylabels, ypreds, pos_label=1)
+
+    eer = brentq(lambda x : 1. - x - interp1d(fpr, tpr)(x), 0., 1.)
+    thresh = interp1d(fpr, thresholds)(eer)
+    return eer, thresh
 
 if __name__ == "__main__":
     w = grad.Variable(torch.tensor(1.0))
