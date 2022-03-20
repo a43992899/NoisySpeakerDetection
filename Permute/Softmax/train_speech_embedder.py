@@ -9,7 +9,7 @@ Created on Wed Sep  5 21:49:16 2018
 import os
 os.chdir(os.path.dirname(os.path.abspath(__file__))) # change to current file path
 import random
-import time
+import time, shutil
 import torch
 from torch.utils.data import DataLoader
 import torch.nn.functional as F
@@ -29,9 +29,8 @@ np.random.seed(1)
 writer = SummaryWriter(hp.train.log_dir)
 
 def train(model_path):
-
     # copy config file to log_dir
-    import shutil
+    os.makedirs(hp.train.checkpoint_dir, exist_ok=True)
     shutil.copy('config/config.yaml', hp.train.log_dir)
 
     #Get label dict
@@ -62,7 +61,6 @@ def train(model_path):
     # criterion = nn.CrossEntropyLoss()
     criterion = nn.NLLLoss()
 
-    os.makedirs(hp.train.checkpoint_dir, exist_ok=True)
     
     embedder_net.train()
     iteration = 0

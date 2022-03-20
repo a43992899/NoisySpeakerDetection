@@ -64,7 +64,7 @@ class GE2ELoss_(nn.Module):
             - init_w (float): defines the initial value of w in Equation (5) of [1]
             - init_b (float): definies the initial value of b in Equation (5) of [1]
         '''
-        super(GE2ELoss, self).__init__()
+        super(GE2ELoss_, self).__init__()
         self.w = nn.Parameter(torch.tensor(init_w))
         self.b = nn.Parameter(torch.tensor(init_b))
         self.loss_method = loss_method

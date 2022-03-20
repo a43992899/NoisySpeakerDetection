@@ -9,13 +9,13 @@ Created on Wed Sep  5 21:49:16 2018
 import os
 os.chdir(os.path.dirname(os.path.abspath(__file__))) # change to current file path
 import random
-import time
+import time, shutil
 import torch
 from torch.utils.data import DataLoader
 import torch.nn.functional as F
 from hparam import hparam as hp
 from data_load import SpeakerDatasetPreprocessed
-from speech_embedder_net import SpeechEmbedder, GE2ELoss, get_centroids, get_cossim
+from speech_embedder_net import SpeechEmbedder, GE2ELoss, GE2ELoss_, get_centroids, get_cossim
 from torch.utils.tensorboard import SummaryWriter
 from scipy.optimize import brentq
 from scipy.interpolate import interp1d
@@ -35,22 +35,32 @@ def get_n_params(model):
     return params
 
 def train(model_path):
+    # create log
+    os.makedirs(hp.train.checkpoint_dir, exist_ok=True)
+    writer = SummaryWriter(hp.train.log_dir)
+    shutil.copy('config/config.yaml', hp.train.log_dir)
+
+    # init
     device = torch.device(hp.device)
     
     train_dataset = SpeakerDatasetPreprocessed()
-
-    train_loader = DataLoader(train_dataset, batch_size=hp.train.N, shuffle=False, num_workers=hp.train.num_workers, drop_last=True, pin_memory=True) 
-    
+    train_loader = DataLoader(train_dataset, batch_size=hp.train.N, shuffle=True, num_workers=hp.train.num_workers, drop_last=True, pin_memory=True) 
     embedder_net = SpeechEmbedder().to(device)
+    # ge2e_loss = GE2ELoss(device)
+    ge2e_loss = GE2ELoss_(init_w=10.0, init_b=-5.0, loss_method='softmax').to(device)
 
-    ge2e_loss = GE2ELoss(device)
-    #Both net and loss have trainable parameters
-    optimizer = torch.optim.SGD([
+    if hp.train.optimizer == 'Adam':
+        optimizer = torch.optim.Adam([
                     {'params': embedder_net.parameters()},
                     {'params': ge2e_loss.parameters()}
                 ], lr=hp.train.lr)
-    
-    os.makedirs(hp.train.checkpoint_dir, exist_ok=True)
+    elif hp.train.optimizer == 'SGD':
+        optimizer = torch.optim.SGD([
+                    {'params': embedder_net.parameters()},
+                    {'params': ge2e_loss.parameters()}
+                ], lr=hp.train.lr, momentum=0.9, weight_decay=5e-4)
+    else:
+        raise ValueError('Unknown optimizer')
     
     embedder_net.train()
     iteration = 0
@@ -87,6 +97,7 @@ def train(model_path):
             if (batch_id + 1) % hp.train.log_interval == 0:
                 mesg = "{0}\tEpoch:{1}[{2}/{3}],Iteration:{4}\tLoss:{5:.4f}\tTLoss:{6:.4f}\t\n".format(time.ctime(), e+1,
                         batch_id+1, len(train_dataset)//hp.train.N, iteration,loss, total_loss / (batch_id + 1))
+                writer.add_scalar('Loss/train', loss, iteration)
                 print(mesg)
                     
         if hp.train.checkpoint_dir is not None and (e + 1) % hp.train.checkpoint_interval == 0:

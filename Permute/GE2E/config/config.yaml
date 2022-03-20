@@ -21,12 +21,14 @@ model:
 train:
     N : 6 #Number of speakers in batch
     M : 10 #Number of utterances per speaker
-    num_workers: 8 #number of workers for dataloader
+    num_workers: 6 #number of workers for dataloader
     lr: 0.01 
+    optimizer: "SGD" # "Adam"
     epochs: 400 #Max training speaker epoch 
     log_interval: 20 #Epochs before printing progress
     checkpoint_interval: 20 #Save model after x speaker epochs
-    checkpoint_dir: '/home/yrb/code/speechbrain/data/models/Permute/GE2E/exp1'
+    log_dir: '/home/yrb/code/speechbrain/data/models/Permute/GE2E/exp4/Chance=0.2/log/'
+    checkpoint_dir: '/home/yrb/code/speechbrain/data/models/Permute/GE2E/exp4/Chance=0.2'
     restore: !!bool "false" #Resume training from previous model path
 ---
 test:
