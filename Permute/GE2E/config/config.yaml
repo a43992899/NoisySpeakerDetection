@@ -1,4 +1,4 @@
-training: !!bool "false"
+training: !!bool "true"
 device: "cuda"
 ---
 data:
@@ -16,23 +16,24 @@ model:
     hidden: 768 #Number of LSTM hidden layer units
     num_layer: 3 #Number of LSTM layers
     proj: 256 #Embedding sizes
-    model_path: '/home/yrb/code/speechbrain/data/models/Permute/GE2E/exp3/Chance=0.2/ckpt_epoch_80.pth'
-    # '/home/yrb/code/speechbrain/data/models/Permute/Softmax/SoftmaxExperiment1/Chance=0.2/ckpt_epoch_2_batch_id_45598.pth'
-    # '/home/yrb/code/speechbrain/data/models/Permute/GE2E/exp3/Chance=0.2/ckpt_epoch_80.pth'
+    model_path: /home/yrb/code/speechbrain/data/models/Permute/Softmax/SoftmaxExperiment1/Chance=0.2/ckpt_epoch_2_batch_id_45598.pth
+    # /home/yrb/code/speechbrain/data/models/Permute/Softmax/SoftmaxExperiment1/Chance=0.2/ckpt_epoch_2_batch_id_45598.pth
+    # /home/yrb/code/speechbrain/data/models/Permute/GE2E/exp3/Chance=0.2/ckpt_epoch_400.pth
 ---
 train:
-    debug: !!bool "true"
-    N : 6 #Number of speakers in batch
-    M : 10 #Number of utterances per speaker
+    debug: !!bool "false"
+    restore: !!bool "false" #Resume training from previous model path
+    N : 64 #Number of speakers in batch
+    M : 1 #Number of utterances per speaker
     num_workers: 6 #number of workers for dataloader
-    lr: 0.01 
-    optimizer: "SGD" # "Adam"
+    lr: 0.0001 
+    optimizer: "Adam" # "Adam"
+    loss: "AAM"
     epochs: 400 #Max training speaker epoch 
     log_interval: 20 #Epochs before printing progress
     checkpoint_interval: 20 #Save model after x speaker epochs
-    log_dir: '/home/yrb/code/speechbrain/data/models/Permute/GE2E/exp4/Chance=0.2/log/'
-    checkpoint_dir: '/home/yrb/code/speechbrain/data/models/Permute/GE2E/exp4/Chance=0.2'
-    restore: !!bool "false" #Resume training from previous model path
+    log_dir: '/home/yrb/code/speechbrain/data/models/Permute/AAM/exp5/Chance=0.2/log/'
+    checkpoint_dir: '/home/yrb/code/speechbrain/data/models/Permute/AAM/exp5/Chance=0.2'
 ---
 test:
     N : 10 #Number of speakers in batch

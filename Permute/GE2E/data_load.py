@@ -30,20 +30,15 @@ def relabel(selected_file, utter_index, mislabel_dict):
 class SpeakerDatasetPreprocessed(Dataset):
     
     def __init__(self):
-        
-        # data path
         if hp.training:
             self.path = hp.data.train_path
             self.utter_num = hp.train.M
         else:
             self.path = hp.data.test_path
             self.utter_num = hp.test.M
-
-        
         self.get_spkr_id()
         self.length = int(len(self.spkr2id)*1)
         self.get_spkr2utter()
-        
     
     def get_spkr_id(self):
         speaker_list = os.listdir(self.path.replace("_single", ""))
@@ -91,14 +86,20 @@ class SpeakerDatasetPreprocessed(Dataset):
         
         # select self.utter_num samples from utters
         selected_utters = random.sample(utters, self.utter_num)
-        utterance_final = []
+        utterance_final, speaker_label, is_noisy, utterance_id = [], [], [], []
         for utter in selected_utters:
             data = np.load(os.path.join(self.path, utter))
             utterance_final.extend(data)
+            speaker_label.extend([idx])
+            if utter.split("_")[0] == selected_spkr:
+                is_noisy.extend([0])
+            else:
+                is_noisy.extend([1])
+            utterance_id.extend([utter])
         utterance = np.array(utterance_final)
         utterance = utterance[:,:,:160]
         utterance = torch.tensor(np.transpose(utterance, axes=(0,2,1))) # transpose [batch, frames, n_mels]
-        return utterance
+        return utterance, np.array(speaker_label), np.array(is_noisy), utterance_id
 
 
 class SpeakerDatasetPreprocessed_old(Dataset):

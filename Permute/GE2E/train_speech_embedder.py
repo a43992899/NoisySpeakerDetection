@@ -15,7 +15,7 @@ from torch.utils.data import DataLoader
 import torch.nn.functional as F
 from hparam import hparam as hp
 from data_load import SpeakerDatasetPreprocessed
-from speech_embedder_net import SpeechEmbedder, SpeechEmbedder_Softmax, GE2ELoss, GE2ELoss_, get_centroids, get_cossim
+from speech_embedder_net import SpeechEmbedder, SpeechEmbedder_Softmax, GE2ELoss, GE2ELoss_, AngularPenaltySMLoss, get_centroids, get_cossim
 from torch.utils.tensorboard import SummaryWriter
 from scipy.optimize import brentq
 from scipy.interpolate import interp1d
@@ -29,6 +29,7 @@ from utils import compute_eer
 
 random.seed(1)
 np.random.seed(1)
+torch.manual_seed(1)
 
 def get_n_params(model):
     model_parameters = filter(lambda p: p.requires_grad, model.parameters())
@@ -49,18 +50,22 @@ def train(model_path):
     train_dataset = SpeakerDatasetPreprocessed()
     train_loader = DataLoader(train_dataset, batch_size=hp.train.N, shuffle=True, num_workers=hp.train.num_workers, drop_last=True, pin_memory=True) 
     embedder_net = SpeechEmbedder().to(device)
-    # ge2e_loss = GE2ELoss(device)
-    ge2e_loss = GE2ELoss_(init_w=10.0, init_b=-5.0, loss_method='softmax').to(device)
+    if hp.train.loss == 'GE2E':
+        criterion = GE2ELoss_(init_w=10.0, init_b=-5.0, loss_method='softmax').to(device)
+    elif hp.train.loss == 'AAM':
+        criterion = AngularPenaltySMLoss(hp.model.proj, 5994, loss_type='arcface').to(device)
+    else:
+        raise ValueError('Unknown loss')
 
     if hp.train.optimizer == 'Adam':
         optimizer = torch.optim.Adam([
                     {'params': embedder_net.parameters()},
-                    {'params': ge2e_loss.parameters()}
+                    {'params': criterion.parameters()}
                 ], lr=hp.train.lr)
     elif hp.train.optimizer == 'SGD':
         optimizer = torch.optim.SGD([
                     {'params': embedder_net.parameters()},
-                    {'params': ge2e_loss.parameters()}
+                    {'params': criterion.parameters()}
                 ], lr=hp.train.lr, momentum=0.9, weight_decay=5e-4)
     else:
         raise ValueError('Unknown optimizer')
@@ -70,29 +75,37 @@ def train(model_path):
 
     for e in range(hp.train.epochs):
         total_loss = 0
-        for batch_id, mel_db_batch in enumerate(train_loader): 
+        for batch_id, (mel_db_batch, labels, is_noisy, utterance_ids) in enumerate(train_loader): 
+            utterance_ids = np.array(utterance_ids).T
             mel_db_batch = mel_db_batch.to(device, non_blocking=True)
+            labels = labels.to(device, non_blocking=True)
 
             mel_db_batch = torch.reshape(mel_db_batch, (hp.train.N*hp.train.M, mel_db_batch.size(2), mel_db_batch.size(3)))
+            labels = labels.reshape(hp.train.N*hp.train.M)
 
             # random permute the batch
             perm = torch.randperm(hp.train.N*hp.train.M)
             unperm = torch.argsort(perm)
 
             mel_db_batch = mel_db_batch[perm]
-            #gradient accumulates
-            optimizer.zero_grad()
-            
+
+            optimizer.zero_grad()            
             embeddings = embedder_net(mel_db_batch)
             embeddings = embeddings[unperm]
-            embeddings = torch.reshape(embeddings, (hp.train.N, hp.train.M, embeddings.size(1)))
-            
+
             #get loss, call backward, step optimizer
-            loss = ge2e_loss(embeddings) #wants (Speaker, Utterances, embedding)
+            if hp.train.loss == 'GE2E':
+                embeddings = torch.reshape(embeddings, (hp.train.N, hp.train.M, embeddings.size(1)))
+                loss = criterion(embeddings) #wants (Speaker, Utterances, embedding)
+            elif hp.train.loss == 'AAM':
+                loss = criterion(embeddings, labels)
+            else:
+                raise ValueError('Unknown loss')
+            
             loss.backward()
 
             torch.nn.utils.clip_grad_norm_(embedder_net.parameters(), 3.0)
-            torch.nn.utils.clip_grad_norm_(ge2e_loss.parameters(), 1.0)
+            torch.nn.utils.clip_grad_norm_(criterion.parameters(), 1.0)
             optimizer.step()
             
             total_loss = total_loss + loss
@@ -143,9 +156,10 @@ def test(model_path):
 
     for e in range(hp.test.epochs):
         batch_avg_EER = 0
-        for batch_id, mel_db_batch in enumerate(tqdm(test_loader)):
-            
+        for batch_id, (mel_db_batch, labels, is_noisy, utterance_ids) in enumerate(tqdm(test_loader)):
             assert hp.test.M % 2 == 0
+            
+            utterance_ids = np.array(utterance_ids).T
             mel_db_batch = mel_db_batch.to(device)
             enrollment_batch, verification_batch = torch.split(mel_db_batch, int(mel_db_batch.size(1)/2), dim=1)
             enrollment_batch = torch.reshape(enrollment_batch, (hp.test.N*hp.test.M//2, enrollment_batch.size(2), enrollment_batch.size(3)))
