@@ -144,6 +144,7 @@ def train(model_path):
     print("\nDone, trained model saved at", hp.model.model_path)
 
 def test(model_path):
+    print("model_path:", model_path)
     device = torch.device(hp.device)
     random.seed(0)
     torch.manual_seed(0)
@@ -213,10 +214,9 @@ def test(model_path):
         print("eer:", eer, "threshold:", thresh)
 
 if __name__=="__main__":
-    if hp.training:
+    if hp.stage == 'train':
         print("Train Permute Experiment")
-        train(hp.model.model_path)
+        train(hp.train.model_path)
     else:
         print("Test Permute Experiment")
-        print("Model path:", hp.model.model_path)
-        test(hp.model.model_path)
+        test(hp.test.model_path)

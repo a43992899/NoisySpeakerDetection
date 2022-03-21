@@ -30,13 +30,20 @@ def relabel(selected_file, utter_index, mislabel_dict):
 class SpeakerDatasetPreprocessed(Dataset):
     
     def __init__(self):
-        if hp.training:
+        if hp.stage == "train":
             self.path = hp.data.train_path
             self.utter_num = hp.train.M
-        else:
+            self.noise_level = hp.train.noise_level
+        elif hp.stage == "test": # test EER
             self.path = hp.data.test_path
             self.utter_num = hp.test.M
-        self.noise_level = hp.train.noise_level
+            self.noise_level = 0
+        elif hp.stage == "nld": # noise label detection
+            self.path = hp.data.nld_path
+            self.utter_num = hp.nld.M
+            self.noise_level = hp.nld.noise_level
+        else:
+            raise ValueError("stage should be train/test/nld")
         self.get_spkr_id()
         self.length = int(len(self.spkr2id)*1)
         self.get_spkr2utter()
@@ -86,7 +93,7 @@ class SpeakerDatasetPreprocessed(Dataset):
 
     def __getitem__(self, idx):
         selected_spkr = self.id2spkr[idx]
-        if hp.training:
+        if hp.stage == "train" or hp.stage == "nld":
             utters = self.spkr2utter_mislabel[selected_spkr]
         else:
             utters = self.spkr2utter[selected_spkr]
