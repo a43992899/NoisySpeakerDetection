@@ -37,6 +37,41 @@ def get_n_params(model):
 
     return params
 
+def get_criterion(device):
+    if hp.train.loss == 'CE':
+        criterion = torch.nn.NLLLoss()
+    elif hp.train.loss == 'GE2E':
+        criterion = GE2ELoss_(init_w=10.0, init_b=-5.0, loss_method='softmax').to(device)
+    elif hp.train.loss == 'AAM':
+        criterion = AngularPenaltySMLoss(hp.model.proj, 5994, s=hp.train.s, m=hp.train.m, loss_type='arcface').to(device)
+    elif hp.train.loss == 'AAMSC':
+        criterion = SubcenterArcMarginProduct(hp.model.proj, 5994, s=hp.train.s, m=hp.train.m, K=hp.train.K).to(device)
+    else:
+        raise ValueError('Unknown loss')
+    return criterion
+
+def get_model(device):
+    if hp.train.loss == 'CE':
+        embedder_net = SpeechEmbedder_Softmax(num_classes=5994).to(device)
+    else:
+        embedder_net = SpeechEmbedder().to(device)
+    return embedder_net
+
+def get_optimizer(model, criterion):
+    if hp.train.optimizer == 'Adam':
+        optimizer = torch.optim.Adam([
+                    {'params': model.parameters()},
+                    {'params': criterion.parameters()}
+                ], lr=hp.train.lr)
+    elif hp.train.optimizer == 'SGD':
+        optimizer = torch.optim.SGD([
+                    {'params': model.parameters()},
+                    {'params': criterion.parameters()}
+                ], lr=hp.train.lr, momentum=0.9, weight_decay=5e-4)
+    else:
+        raise ValueError('Unknown optimizer')
+    return optimizer
+
 def train(model_path):
     # create log
     if not hp.train.debug:
@@ -50,33 +85,16 @@ def train(model_path):
     
     train_dataset = SpeakerDatasetPreprocessed()
     train_loader = DataLoader(train_dataset, batch_size=hp.train.N, shuffle=True, num_workers=hp.train.num_workers, drop_last=True, pin_memory=True) 
-    embedder_net = SpeechEmbedder().to(device)
+    
+    embedder_net = get_model(device)
+    criterion = get_criterion(device)
+    optimizer = get_optimizer(embedder_net, criterion)
+
     if hp.train.restore:
         embedder_net.load_state_dict(torch.load(model_path))
         restored_epoch = int(model_path.split('/')[-1].split('_')[-1].split('.')[0])
     else:
         restored_epoch = 0
-    if hp.train.loss == 'GE2E':
-        criterion = GE2ELoss_(init_w=10.0, init_b=-5.0, loss_method='softmax').to(device)
-    elif hp.train.loss == 'AAM':
-        criterion = AngularPenaltySMLoss(hp.model.proj, 5994, s=hp.train.s, m=hp.train.m, loss_type='arcface').to(device)
-    elif hp.train.loss == 'AAMSC':
-        criterion = SubcenterArcMarginProduct(hp.model.proj, 5994, s=hp.train.s, m=hp.train.m, K=hp.train.K).to(device)
-    else:
-        raise ValueError('Unknown loss')
-
-    if hp.train.optimizer == 'Adam':
-        optimizer = torch.optim.Adam([
-                    {'params': embedder_net.parameters()},
-                    {'params': criterion.parameters()}
-                ], lr=hp.train.lr)
-    elif hp.train.optimizer == 'SGD':
-        optimizer = torch.optim.SGD([
-                    {'params': embedder_net.parameters()},
-                    {'params': criterion.parameters()}
-                ], lr=hp.train.lr, momentum=0.9, weight_decay=5e-4)
-    else:
-        raise ValueError('Unknown optimizer')
     
     embedder_net.train()
     iteration = 0
@@ -102,10 +120,10 @@ def train(model_path):
             embeddings = embeddings[unperm]
 
             #get loss, call backward, step optimizer
-            if hp.train.loss == 'GE2E':
+            if hp.train.loss in {'GE2E'}:
                 embeddings = torch.reshape(embeddings, (hp.train.N, hp.train.M, embeddings.size(1)))
                 loss = criterion(embeddings) #wants (Speaker, Utterances, embedding)
-            elif hp.train.loss == 'AAM' or hp.train.loss == 'AAMSC':
+            elif hp.train.loss in {'AAM', 'AAMSC', 'CE'}:
                 loss = criterion(embeddings, labels)
             else:
                 raise ValueError('Unknown loss')
@@ -139,12 +157,14 @@ def train(model_path):
 
     #save model
     embedder_net.eval().cpu()
-    torch.save(embedder_net.state_dict(), hp.model.model_path)
+    ckpt_model_filename = "ckpt_final.pth"
+    ckpt_model_path = os.path.join(hp.train.checkpoint_dir, ckpt_criterion_filename)
+    torch.save(embedder_net.state_dict(), ckpt_model_path)
     
-    print("\nDone, trained model saved at", hp.model.model_path)
+    print("\nDone, trained model saved at", ckpt_model_path)
 
 def test(model_path):
-    print("model_path:", model_path)
+    print(model_path)
     device = torch.device(hp.device)
     random.seed(0)
     torch.manual_seed(0)

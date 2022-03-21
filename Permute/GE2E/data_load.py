@@ -68,7 +68,7 @@ class SpeakerDatasetPreprocessed(Dataset):
         assert self.noise_level in [0, 20, 40, 50 ,60, 75]
         if self.noise_level > 0:
             # mislabel_mapper maps a file to a wrong speaker
-            with open(f"/home/yrb/code/speechbrain/Permute/Softmax/voxceleb2_{self.noise_level}%_mislabel.json", "r") as f:
+            with open(f"/home/yrb/code/speechbrain/data/jsons/Permute/voxceleb2_{self.noise_level}%_mislabel.json", "r") as f:
                 mislabel_mapper = json.load(f)
         else:
             mislabel_mapper = {}
