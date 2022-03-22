@@ -122,7 +122,9 @@ def train(model_path):
             #get loss, call backward, step optimizer
             if hp.train.loss in {'GE2E'}:
                 embeddings = torch.reshape(embeddings, (hp.train.N, hp.train.M, embeddings.size(1)))
-                loss = criterion(embeddings) #wants (Speaker, Utterances, embedding)
+                loss, prec1 = criterion(embeddings) #wants (Speaker, Utterances, embedding)
+                if batch_id % 100 == 0:
+                    print('batch acc:', prec1.item())
             elif hp.train.loss in {'AAM', 'AAMSC', 'CE'}:
                 loss = criterion(embeddings, labels)
             else:

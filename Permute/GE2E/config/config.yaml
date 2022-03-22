@@ -1,4 +1,4 @@
-stage: nld # [train, test, nld]
+stage: train # [train, test, nld]
 device: "cuda"
 ---
 data:
@@ -21,20 +21,20 @@ model:
 train:
     debug: !!bool "false" #without saving
     restore: !!bool "false" #Resume training from previous model path
-    noise_level: 75 # [0, 20, 40, 50 ,60, 75]
-    N : 64 #Number of speakers in batch
-    M : 1 #Number of utterances per speaker
+    noise_level: 50 # [0, 20, 40, 50 ,60, 75]
+    N : 32 #Number of speakers in batch
+    M : 4 #Number of utterances per speaker
     num_workers: 6 #number of workers for dataloader
     lr: 0.0001 
     optimizer: Adam # "Adam"
-    loss: CE
+    loss: GE2E
     s: 15
     m: 0.3
-    K: 3
+    K: 10
     epochs: 400 #Max training speaker epoch 
     log_interval: 20 #Epochs before printing progress
     checkpoint_interval: 20 #Save model after x speaker epochs
-    checkpoint_dir: '/home/yrb/code/speechbrain/data/models/Permute/Softmax/exp3/'
+    checkpoint_dir: '/home/yrb/code/speechbrain/data/models/Permute/GE2E/exp7/'
     model_path: ''
 ---
 test:
@@ -42,8 +42,8 @@ test:
     M : 6 #Number of utterances per speaker
     num_workers: 1 #number of workers for data laoder
     epochs: 100 #testing speaker epochs
-    model_path: /home/yrb/code/speechbrain/data/models/Permute/Softmax/exp2/ckpt_epoch_400.pth
-    # /home/yrb/code/speechbrain/data/models/Permute/AAMSC/exp1/ckpt_epoch_500.pth
+    model_path: /home/yrb/code/speechbrain/data/models/Permute/GE2E/exp6/ckpt_epoch_400.pth
+    # /home/yrb/code/speechbrain/data/models/Permute/AAMSC/exp1/ckpt_epoch_220.pth
     # /home/yrb/code/speechbrain/data/models/Permute/AAMSC/exp1/ckpt_epoch_180.pth
     # /home/yrb/code/speechbrain/data/models/Permute/AAM/exp1/ckpt_epoch_1200.pth
     # /home/yrb/code/speechbrain/data/models/Permute/AAM/exp5/Chance=0.2/ckpt_epoch_400.pth
@@ -51,10 +51,11 @@ test:
     # /home/yrb/code/speechbrain/data/models/Permute/GE2E/exp3/Chance=0.2/ckpt_epoch_400.pth
 ---
 nld: # noisy label detection
-    noise_level: 75 # [0, 20, 40, 50 ,60, 75]
-    model_path: /home/yrb/code/speechbrain/data/models/Permute/Softmax/exp3/ckpt_epoch_400.pth # 75%
+    noise_level: 20 # [0, 20, 40, 50 ,60, 75]
+    model_path: /home/yrb/code/speechbrain/data/models/Permute/Softmax/exp1/ckpt_epoch_400.pth # 50%
     # /home/yrb/code/speechbrain/data/models/Permute/Softmax/exp1/ckpt_epoch_400.pth # 20%
     # /home/yrb/code/speechbrain/data/models/Permute/Softmax/exp2/ckpt_epoch_400.pth # 50%
+    # /home/yrb/code/speechbrain/data/models/Permute/Softmax/exp3/ckpt_epoch_400.pth # 75%
     N : 1 #Number of speakers in batch
     M : -1 #Number of utterances per speaker (-1 means all)
     num_workers: 1 #number of workers for dataloader
