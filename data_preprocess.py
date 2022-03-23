@@ -50,4 +50,4 @@ def save_spectrogram_tisv(speaker_path, data_train_path):
 
 if __name__ == "__main__":
     # save_spectrogram_tisv("/home/yrb/code/speechbrain/data/voxceleb/vox2/aac","/home/yrb/code/speechbrain/data/voxceleb/vox2/spmel")
-    save_spectrogram_tisv("/home/yrb/code/speechbrain/data/voxceleb/vox1_test/wav","/home/yrb/code/speechbrain/data/voxceleb/vox1_test/spmel")
+    save_spectrogram_tisv("/home/yrb/code/speechbrain/data/voxceleb/vox1/wav","/home/yrb/code/speechbrain/data/voxceleb/vox1/spmel")

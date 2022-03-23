@@ -92,6 +92,12 @@ def train(model_path):
 
     if hp.train.restore:
         embedder_net.load_state_dict(torch.load(model_path))
+        try:
+            criterion.load_state_dict(torch.load(model_path.replace('ckpt_epoch', 'ckpt_criterion_epoch')))
+            criterion.m = hp.train.m
+            print('Loaded criterion')
+        except:
+            pass
         restored_epoch = int(model_path.split('/')[-1].split('_')[-1].split('.')[0])
     else:
         restored_epoch = 0
