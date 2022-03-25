@@ -49,13 +49,9 @@ class SpeakerDatasetPreprocessed(Dataset):
         self.get_spkr2utter()
     
     def get_spkr_id(self):
-        speaker_list = os.listdir(self.path.replace("_single", ""))
-        speaker_list.sort()
-        self.spkr2id = {}
-        self.id2spkr = {}
-        for i in range(len(speaker_list)):
-            self.spkr2id[speaker_list[i][:-4]] = i
-            self.id2spkr[i] = speaker_list[i][:-4]
+        spkr2id_json = os.path.join(self.path, "../spkr2id.json")
+        self.spkr2id = json.load(open(spkr2id_json, "r"))
+        self.id2spkr = {v: k for k, v in self.spkr2id.items()}
     
     def get_spkr2utter(self):
         """
