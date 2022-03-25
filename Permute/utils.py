@@ -9,39 +9,67 @@ import numpy as np
 import torch
 import torch.autograd as grad
 import torch.nn.functional as F
+from scipy.optimize import brentq
+from scipy.interpolate import interp1d
+from sklearn.metrics import roc_curve
 
 from hparam import hparam as hp
 
+def accuracy(output, target, topk=(1,)):
+    """Computes the precision@k for the specified values of k"""
+    maxk = max(topk)
+    batch_size = target.size(0)
+
+    _, pred = output.topk(maxk, 1, True, True)
+    pred = pred.t()
+    correct = pred.eq(target.view(1, -1).expand_as(pred))
+
+    res = []
+    for k in topk:
+        correct_k = correct[:k].view(-1).float().sum(0, keepdim=True)
+        res.append(correct_k.mul_(100.0 / batch_size))
+    return res
+
 def get_centroids(embeddings):
-    centroids = []
-    for speaker in embeddings:
-        centroid = 0
-        for utterance in speaker:
-            centroid = centroid + utterance
-        centroid = centroid/len(speaker)
-        centroids.append(centroid)
-    centroids = torch.stack(centroids)
-    return centroids
+    """
+    embeddings: [N, M, emb_size]
+    N speakers, M utterances per speaker
 
-def get_centroid(embeddings, speaker_num, utterance_num):
-    centroid = 0
-    for utterance_id, utterance in enumerate(embeddings[speaker_num]):
-        if utterance_id == utterance_num:
-            continue
-        centroid = centroid + utterance
-    centroid = centroid/(len(embeddings[speaker_num])-1)
-    return centroid
+    Returns: [N, emb_size]
+    """
+    return torch.mean(embeddings, dim=1)
 
-def get_cossim(embeddings, centroids):
-    # Calculates cosine similarity matrix. Requires (N, M, feature) input
-    cossim = torch.zeros(embeddings.size(0),embeddings.size(1),centroids.size(0))
-    for speaker_num, speaker in enumerate(embeddings):
-        for utterance_num, utterance in enumerate(speaker):
-            for centroid_num, centroid in enumerate(centroids):
-                if speaker_num == centroid_num:
-                    centroid = get_centroid(embeddings, speaker_num, utterance_num)
-                output = F.cosine_similarity(utterance,centroid,dim=0)+1e-6
-                cossim[speaker_num][utterance_num][centroid_num] = output
+def get_centroid(embeddings, speaker_id, utterance_id):
+    """get centroid without corresponding utterance
+    embeddings: [N, M, emb_size], N speakers, M utterances per speaker
+    speaker_id: speaker index
+    utterance_id: utterance index
+
+    Returns: [emb_size]
+    """
+    speaker_embs = embeddings[speaker_id].detach().clone()
+    speaker_embs[utterance_id] = 0
+    return torch.sum(speaker_embs, dim=0) / (speaker_embs.size(0)-1)
+
+def get_cossim(embeddings, centroids, cos):
+    """compute cosine similarity matrix among all (utter_emb, centroid) pairs
+    when calculating cossim between an utter_emb with self-centroid, we need to recompute self-centroid by excluding the utterance
+    embeddings: [N, M, emb_size]
+    centroids: [N, emb_size]
+    cos: cosine similarity
+
+    Returns: [N, M, N] N speakers, M utterances per speaker, N speaker centroids
+    """
+    N = embeddings.size(0)
+    M = embeddings.size(1)
+    emb_size = embeddings.size(2)
+    cossim = torch.zeros(N, M, N)
+    for i in range(N):
+        cossim[:, :, i] = cos(embeddings, centroids[i])
+    for speaker_id in range(N):
+        for utter_id in range(M):
+            self_exclude_centroid = get_centroid(embeddings, speaker_id, utter_id)
+            cossim[speaker_id, utter_id, speaker_id] = cos(embeddings[speaker_id, utter_id], self_exclude_centroid)
     return cossim
 
 def calc_loss(sim_matrix):
@@ -84,6 +112,16 @@ def mfccs_and_spec(wav_file, wav_process = False, calc_mfccs=False, calc_mag_db=
         mfccs = np.dot(librosa.filters.dct(40, mel_db.shape[0]), mel_db).T
     
     return mfccs, mel_db, mag_db
+
+def compute_eer(ypreds, ylabels):
+    ypreds = np.concatenate(ypreds)
+    ylabels = np.concatenate(ylabels)
+
+    fpr, tpr, thresholds = roc_curve(ylabels, ypreds, pos_label=1)
+
+    eer = brentq(lambda x : 1. - x - interp1d(fpr, tpr)(x), 0., 1.)
+    thresh = interp1d(fpr, thresholds)(eer)
+    return eer, thresh
 
 if __name__ == "__main__":
     w = grad.Variable(torch.tensor(1.0))

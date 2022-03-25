@@ -3,8 +3,8 @@
 #Modified from https://github.com/JanhHyun/Speaker_Verification
 import os, sys, glob
 # set current working directory
-os.chdir('/home/yrb/code/speechbrain/recipes/VoxCeleb/NoisySpeakerDet/xvector/Split/')
-sys.path.append('/home/yrb/code/speechbrain/recipes/VoxCeleb/NoisySpeakerDet/xvector/Split/')
+os.chdir('/home/yrb/code/speechbrain/Permute/GE2E')
+sys.path.append('/home/yrb/code/speechbrain/Permute/GE2E')
 
 import librosa
 import numpy as np
@@ -18,10 +18,10 @@ warnings.filterwarnings("ignore")
 def save_spectrogram_tisv(speaker_path, data_train_path):
     
     utter_min_len = (hp.data.tisv_frame * hp.data.hop + hp.data.window) * hp.data.sr    # lower bound of utterance length
-    total_speaker_num = len(os.listdir(speaker_path))
-    train_speaker_num= (total_speaker_num//10)*9            # split total data 90% train and 10% test
-    print("total speaker number : %d"%total_speaker_num)
-    print("train : %d, test : %d"%(train_speaker_num, total_speaker_num-train_speaker_num))
+    # total_speaker_num = len(os.listdir(speaker_path))
+    # train_speaker_num= (total_speaker_num//10)*9            # split total data 90% train and 10% test
+    # print("total speaker number : %d"%total_speaker_num)
+    # print("train : %d, test : %d"%(train_speaker_num, total_speaker_num-train_speaker_num))
     for i, folder in enumerate(tqdm(os.listdir(speaker_path))):
         # print(folder)
         # print("%dth speaker processing..."%i)
@@ -49,4 +49,5 @@ def save_spectrogram_tisv(speaker_path, data_train_path):
         np.save(os.path.join(data_train_path, "{}.npy".format(folder)), utterances_spec)
 
 if __name__ == "__main__":
-    save_spectrogram_tisv("/home/yrb/code/speechbrain/data/voxceleb/vox2/aac","/home/yrb/code/speechbrain/data/voxceleb/vox2/spmel")
+    # save_spectrogram_tisv("/home/yrb/code/speechbrain/data/voxceleb/vox2/aac","/home/yrb/code/speechbrain/data/voxceleb/vox2/spmel")
+    save_spectrogram_tisv("/home/yrb/code/speechbrain/data/voxceleb/vox1/wav","/home/yrb/code/speechbrain/data/voxceleb/vox1/spmel")

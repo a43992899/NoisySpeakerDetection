@@ -1,0 +1,71 @@
+stage: test # [train, test, nld]
+device: "cuda"
+---
+data:
+    train_path: '/home/yrb/code/speechbrain/data/voxceleb/vox2/spmel_single'
+    test_path: '/home/yrb/code/speechbrain/data/voxceleb/vox1_test/spmel_single'
+    nld_path: '/home/yrb/code/speechbrain/data/voxceleb/vox2/spmel_single'
+    data_preprocessed: !!bool "true" 
+    sr: 16000
+    nfft: 512 #For mel spectrogram preprocess
+    window: 0.025 #(s)
+    hop: 0.01 #(s)
+    nmels: 40 #Number of mel energies
+    tisv_frame: 180 #Max number of time steps in input after preprocess
+---   
+model:
+    hidden: 768 #Number of LSTM hidden layer units
+    num_layer: 3 #Number of LSTM layers
+    proj: 256 #Embedding sizes
+---
+train:
+    debug: !!bool "false" #without saving
+    restore: !!bool "false" #Resume training from previous model path
+    noise_level: 75 # [0, 20, 40, 50 ,60, 75]
+    N : 128 #Number of speakers in batch
+    M : 1 #Number of utterances per speaker
+    num_workers: 6 #number of workers for dataloader
+    lr: 0.0001 
+    optimizer: Adam # "Adam"
+    loss: CE
+    s: 15
+    m: 0.1
+    K: 10
+    epochs: 1600 #Max training speaker epoch 
+    log_interval: 20 #Epochs before printing progress
+    checkpoint_interval: 20 #Save model after x speaker epochs
+    checkpoint_dir: /home/yrb/code/speechbrain/data/models/Permute/Softmax/75%/bs128
+    model_path: /home/yrb/code/speechbrain/data/models/Permute/AAM/50%/m0.1_s15_bs128/ckpt_epoch_320.pth
+---
+test:
+    N : 10 #Number of speakers in batch
+    M : 6 #Number of utterances per speaker
+    num_workers: 1 #number of workers for data laoder
+    epochs: 300 #testing speaker epochs
+    model_path: /home/yrb/code/speechbrain/data/models/Permute/AAM/0%/m0.1_s15_bs256/ckpt_epoch_1020.pth
+---
+nld: # noisy label detection
+    noise_level: 20 # [0, 20, 40, 50 ,60, 75]
+    model_path: /home/yrb/code/speechbrain/data/models/Permute/AAM/exp3/ckpt_epoch_800.pth # 20%
+    ######## GE2E ##############
+    # /home/yrb/code/speechbrain/data/models/Permute/GE2E/0%/ckpt_epoch_400.pth
+    # /home/yrb/code/speechbrain/data/models/Permute/GE2E/20%/ckpt_epoch_200.pth
+    # /home/yrb/code/speechbrain/data/models/Permute/GE2E/exp9/ckpt_epoch_120.pth # 20%
+    # /home/yrb/code/speechbrain/data/models/Permute/GE2E/exp7/ckpt_epoch_120.pth # 50%
+    # /home/yrb/code/speechbrain/data/models/Permute/GE2E/exp8/ckpt_epoch_120.pth # 75%
+    ######## Softmax #############
+    # /home/yrb/code/speechbrain/data/models/Permute/Softmax/0%/ckpt_epoch_1600.pth
+    # /home/yrb/code/speechbrain/data/models/Permute/Softmax/exp1/ckpt_epoch_400.pth # 20%
+    # /home/yrb/code/speechbrain/data/models/Permute/Softmax/exp2/ckpt_epoch_400.pth # 50%
+    # /home/yrb/code/speechbrain/data/models/Permute/Softmax/exp4/ckpt_epoch_400.pth # 75%
+    ####### AAMSC ##################
+    ####### AAM ##################
+    # /home/yrb/code/speechbrain/data/models/Permute/Softmax/0%/m0.3_bs128/ckpt_epoch_1600.pth
+    # /home/yrb/code/speechbrain/data/models/Permute/AAM/exp1/ckpt_epoch_400.pth # 0%
+    # /home/yrb/code/speechbrain/data/models/Permute/AAM/exp2/ckpt_epoch_400.pth # 20%
+    # /home/yrb/code/speechbrain/data/models/Permute/AAM/exp3/ckpt_epoch_800.pth # 20%
+    # /home/yrb/code/speechbrain/data/models/Permute/AAM/exp4/ckpt_epoch_800.pth # 50%
+    # /home/yrb/code/speechbrain/data/models/Permute/AAM/exp6/ckpt_epoch_400.pth # 50%
+    N : 1 #Number of speakers in batch
+    M : -1 #Number of utterances per speaker (-1 means all)
+    num_workers: 1 #number of workers for dataloader
