@@ -36,6 +36,7 @@ class SpeechEmbedder(nn.Module):
         # print("Shape is: ", x.shape)
         return x
 
+
 class SpeechEmbedder_Softmax(nn.Module):
     
     def __init__(self, num_classes):
@@ -75,6 +76,7 @@ class SpeechEmbedder_Softmax(nn.Module):
         
         return x
 
+
 class GE2ELoss(nn.Module):
     
     def __init__(self, device):
@@ -92,105 +94,6 @@ class GE2ELoss(nn.Module):
         loss, _ = calc_loss(sim_matrix)
         return loss
 
-"""
-class GE2ELoss_(nn.Module):
-
-    def __init__(self, init_w=10.0, init_b=-5.0, loss_method='softmax'):
-        '''
-        Implementation of the Generalized End-to-End loss defined in https://arxiv.org/abs/1710.10467 [1]
-        Accepts an input of size (N, M, D)
-            where N is the number of speakers in the batch,
-            M is the number of utterances per speaker,
-            and D is the dimensionality of the embedding vector (e.g. d-vector)
-        Args:
-            - init_w (float): defines the initial value of w in Equation (5) of [1]
-            - init_b (float): definies the initial value of b in Equation (5) of [1]
-        '''
-        super(GE2ELoss_, self).__init__()
-        self.w = nn.Parameter(torch.tensor(init_w))
-        self.b = nn.Parameter(torch.tensor(init_b))
-        self.loss_method = loss_method
-
-        assert self.loss_method in ['softmax', 'contrast']
-
-        if self.loss_method == 'softmax':
-            self.embed_loss = self.embed_loss_softmax
-        if self.loss_method == 'contrast':
-            self.embed_loss = self.embed_loss_contrast
-
-    def calc_new_centroids(self, dvecs, centroids, spkr, utt):
-        '''
-        Calculates the new centroids excluding the reference utterance
-        '''
-        excl = torch.cat((dvecs[spkr,:utt], dvecs[spkr,utt+1:]))
-        excl = torch.mean(excl, 0)
-        new_centroids = []
-        for i, centroid in enumerate(centroids):
-            if i == spkr:
-                new_centroids.append(excl)
-            else:
-                new_centroids.append(centroid)
-        return torch.stack(new_centroids)
-
-    def calc_cosine_sim(self, dvecs, centroids):
-        '''
-        Make the cosine similarity matrix with dims (N,M,N)
-        '''
-        cos_sim_matrix = []
-        for spkr_idx, speaker in enumerate(dvecs):
-            cs_row = []
-            for utt_idx, utterance in enumerate(speaker):
-                new_centroids = self.calc_new_centroids(dvecs, centroids, spkr_idx, utt_idx)
-                # vector based cosine similarity for speed
-                cs_row.append(torch.clamp(torch.mm(utterance.unsqueeze(1).transpose(0,1), new_centroids.transpose(0,1)) / (torch.norm(utterance) * torch.norm(new_centroids, dim=1)), 1e-6))
-            cs_row = torch.cat(cs_row, dim=0)
-            cos_sim_matrix.append(cs_row)
-        return torch.stack(cos_sim_matrix)
-
-    def embed_loss_softmax(self, dvecs, cos_sim_matrix):
-        '''
-        Calculates the loss on each embedding $L(e_{ji})$ by taking softmax
-        '''
-        N, M, _ = dvecs.shape
-        L = []
-        for j in range(N):
-            L_row = []
-            for i in range(M):
-                L_row.append(-F.log_softmax(cos_sim_matrix[j,i], 0)[j])
-            L_row = torch.stack(L_row)
-            L.append(L_row)
-        return torch.stack(L)
-
-    def embed_loss_contrast(self, dvecs, cos_sim_matrix):
-        ''' 
-        Calculates the loss on each embedding $L(e_{ji})$ by contrast loss with closest centroid
-        '''
-        N, M, _ = dvecs.shape
-        L = []
-        for j in range(N):
-            L_row = []
-            for i in range(M):
-                centroids_sigmoids = torch.sigmoid(cos_sim_matrix[j,i])
-                excl_centroids_sigmoids = torch.cat((centroids_sigmoids[:j], centroids_sigmoids[j+1:]))
-                L_row.append(1. - torch.sigmoid(cos_sim_matrix[j,i,j]) + torch.max(excl_centroids_sigmoids))
-            L_row = torch.stack(L_row)
-            L.append(L_row)
-        return torch.stack(L)
-
-    def forward(self, dvecs):
-        '''
-        Calculates the GE2E loss for an input of dimensions (num_speakers, num_utts_per_speaker, dvec_feats)
-        '''
-        #Calculate centroids
-        centroids = torch.mean(dvecs, 1)
-
-        #Calculate the cosine similarity matrix
-        cos_sim_matrix = self.calc_cosine_sim(dvecs, centroids)
-        torch.clamp(self.w, 1e-6)
-        cos_sim_matrix = cos_sim_matrix * self.w + self.b
-        L = self.embed_loss(dvecs, cos_sim_matrix)
-        return L.sum()
-"""
 
 class GE2ELoss_(nn.Module):
 
@@ -233,6 +136,66 @@ class GE2ELoss_(nn.Module):
         nloss = self.criterion(cos_sim_matrix.view(-1,stepsize), torch.repeat_interleave(label,repeats=gsize,dim=0).cuda())
         prec1 = accuracy(cos_sim_matrix.view(-1,stepsize).detach(), torch.repeat_interleave(label,repeats=gsize,dim=0).detach(), topk=(1,))[0]
         return nloss, prec1
+
+
+class AAMSoftmax(nn.Module):
+    def __init__(self, nOut, nClasses, margin=0.3, scale=15, easy_margin=False, **kwargs):
+        super(AAMSoftmax, self).__init__()
+
+        self.test_normalize = True
+        
+        self.m = margin
+        self.s = scale
+        self.in_feats = nOut
+        self.weight = torch.nn.Parameter(torch.FloatTensor(nClasses, nOut), requires_grad=True)
+        self.ce = nn.CrossEntropyLoss()
+        nn.init.xavier_normal_(self.weight, gain=1)
+
+        self.easy_margin = easy_margin
+        self.cos_m = math.cos(self.m)
+        self.sin_m = math.sin(self.m)
+
+        # make the function cos(theta+m) monotonic decreasing while theta in [0°,180°]
+        self.th = math.cos(math.pi - self.m)
+        self.mm = math.sin(math.pi - self.m) * self.m
+
+        print('Initialised AAMSoftmax margin %.3f scale %.3f'%(self.m,self.s))
+    
+    def predict(self, x):
+        assert x.size()[0] == label.size()[0]
+        assert x.size()[1] == self.in_feats
+        
+        # cos(theta)
+        cosine = F.linear(F.normalize(x), F.normalize(self.weight))
+        output = cosine * self.s
+        return output
+
+    def forward(self, x, label=None):
+
+        assert x.size()[0] == label.size()[0]
+        assert x.size()[1] == self.in_feats
+        
+        # cos(theta)
+        cosine = F.linear(F.normalize(x), F.normalize(self.weight))
+        # cos(theta + m)
+        sine = torch.sqrt((1.0 - torch.mul(cosine, cosine)).clamp(0, 1))
+        phi = cosine * self.cos_m - sine * self.sin_m
+
+        if self.easy_margin:
+            phi = torch.where(cosine > 0, phi, cosine)
+        else:
+            phi = torch.where((cosine - self.th) > 0, phi, cosine - self.mm)
+
+        #one_hot = torch.zeros(cosine.size(), device='cuda' if torch.cuda.is_available() else 'cpu')
+        one_hot = torch.zeros_like(cosine)
+        one_hot.scatter_(1, label.view(-1, 1), 1)
+        output = (one_hot * phi) + ((1.0 - one_hot) * cosine)
+        output = output * self.s
+
+        loss    = self.ce(output, label)
+        prec1   = accuracy(output.detach(), label.detach(), topk=(1,))[0]
+        return loss, prec1
+
 
 class AngularPenaltySMLoss(nn.Module):
 
@@ -290,6 +253,7 @@ class AngularPenaltySMLoss(nn.Module):
         L = numerator - torch.log(denominator)
         return -torch.mean(L)
 
+
 class SubcenterArcMarginProduct(nn.Module):
     r"""Modified implementation from https://github.com/ronghuaiyang/arcface-pytorch/blob/47ace80b128042cd8d2efd408f55c5a3e156b032/models/metrics.py#L10
         """
@@ -309,6 +273,29 @@ class SubcenterArcMarginProduct(nn.Module):
         self.th = math.cos(math.pi - m)
         self.mm = math.sin(math.pi - m) * m
         self.ce_loss = nn.CrossEntropyLoss()
+    
+    def predict(self, input):
+        # --------------------------- cos(theta) & phi(theta) ---------------------------
+        cosine = F.linear(F.normalize(input), F.normalize(self.weight))
+        
+        if self.K > 1:
+            cosine = torch.reshape(cosine, (-1, self.out_features, self.K))
+            cosine, _ = torch.max(cosine, axis=2)
+        
+        sine = torch.sqrt((1.0 - torch.pow(cosine, 2)).clamp(0, 1))
+        #cos(phi+m)
+        phi = cosine * self.cos_m - sine * self.sin_m
+
+        phi = torch.where(cosine > 0, phi, cosine)
+
+        # --------------------------- convert label to one-hot ---------------------------
+        # one_hot = torch.zeros(cosine.size(), requires_grad=True, device='cuda')
+        one_hot = torch.zeros(cosine.size(), device='cuda')
+        one_hot.scatter_(1, label.view(-1, 1).long(), 1)
+        # -------------torch.where(out_i = {x_i if condition_i else y_i) -------------
+        output = (one_hot * phi) + ((1.0 - one_hot) * cosine)  # you can use torch.where if your torch.__version__ is 0.4
+        output *= self.s
+        return output
 
     def forward(self, input, label):
         # --------------------------- cos(theta) & phi(theta) ---------------------------
@@ -335,5 +322,6 @@ class SubcenterArcMarginProduct(nn.Module):
         output = (one_hot * phi) + ((1.0 - one_hot) * cosine)  # you can use torch.where if your torch.__version__ is 0.4
         output *= self.s
         # print(output)
-
-        return self.ce_loss(output, label)
+        loss = self.ce_loss(output, label)
+        prec1   = accuracy(output.detach(), label.detach(), topk=(1,))[0]
+        return loss, prec1

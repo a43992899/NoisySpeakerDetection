@@ -13,9 +13,11 @@ import time, shutil
 import torch
 from torch.utils.data import DataLoader
 import torch.nn.functional as F
+from torch.cuda.amp import autocast as autocast
+from torch.cuda.amp import GradScaler as GradScaler
 from hparam import hparam as hp
 from data_load import SpeakerDatasetPreprocessed
-from speech_embedder_net import SpeechEmbedder, SpeechEmbedder_Softmax, GE2ELoss, GE2ELoss_, AngularPenaltySMLoss, SubcenterArcMarginProduct, get_centroids, get_cossim
+from speech_embedder_net import SpeechEmbedder, SpeechEmbedder_Softmax, GE2ELoss, GE2ELoss_, AngularPenaltySMLoss, AAMSoftmax,SubcenterArcMarginProduct, get_centroids, get_cossim
 from torch.utils.tensorboard import SummaryWriter
 from scipy.optimize import brentq
 from scipy.interpolate import interp1d
@@ -43,7 +45,7 @@ def get_criterion(device):
     elif hp.train.loss == 'GE2E':
         criterion = GE2ELoss_(init_w=10.0, init_b=-5.0, loss_method='softmax').to(device)
     elif hp.train.loss == 'AAM':
-        criterion = AngularPenaltySMLoss(hp.model.proj, 5994, s=hp.train.s, m=hp.train.m, loss_type='arcface').to(device)
+        criterion = AAMSoftmax(hp.model.proj, 5994, scale=hp.train.s, margin=hp.train.m, easy_margin=True).to(device)
     elif hp.train.loss == 'AAMSC':
         criterion = SubcenterArcMarginProduct(hp.model.proj, 5994, s=hp.train.s, m=hp.train.m, K=hp.train.K).to(device)
     else:
@@ -89,6 +91,7 @@ def train(model_path):
     embedder_net = get_model(device)
     criterion = get_criterion(device)
     optimizer = get_optimizer(embedder_net, criterion)
+    scaler = GradScaler()
 
     if hp.train.restore:
         embedder_net.load_state_dict(torch.load(model_path))
@@ -121,26 +124,34 @@ def train(model_path):
 
             mel_db_batch = mel_db_batch[perm]
 
-            optimizer.zero_grad()            
-            embeddings = embedder_net(mel_db_batch)
-            embeddings = embeddings[unperm]
-
-            #get loss, call backward, step optimizer
-            if hp.train.loss in {'GE2E'}:
-                embeddings = torch.reshape(embeddings, (hp.train.N, hp.train.M, embeddings.size(1)))
-                loss, prec1 = criterion(embeddings) #wants (Speaker, Utterances, embedding)
-                if batch_id % 100 == 0:
-                    print('batch acc:', prec1.item())
-            elif hp.train.loss in {'AAM', 'AAMSC', 'CE'}:
-                loss = criterion(embeddings, labels)
-            else:
-                raise ValueError('Unknown loss')
+            optimizer.zero_grad()
+            with autocast():
+                embeddings = embedder_net(mel_db_batch)
+                embeddings = embeddings[unperm]
+                if hp.train.loss in {'GE2E'}:
+                    embeddings = torch.reshape(embeddings, (hp.train.N, hp.train.M, embeddings.size(1)))
+                    loss, prec1 = criterion(embeddings) #wants (Speaker, Utterances, embedding)
+                    if batch_id % 100 == 0:
+                        print('batch acc:', prec1.item())
+                elif hp.train.loss in {'AAM', 'AAMSC', 'CE'}:
+                    if hp.train.loss != 'CE':
+                        if e >= 200:
+                            criterion.easy_margin = False
+                    loss = criterion(embeddings, labels)
+                    if type(loss) == tuple:
+                        loss, prec1 = loss
+                        if batch_id % 100 == 0:
+                            print('batch acc:', prec1.item())  
+                else:
+                    raise ValueError('Unknown loss')
             
-            loss.backward()
+            scaler.scale(loss).backward()
+            scaler.unscale_(optimizer)
 
             torch.nn.utils.clip_grad_norm_(embedder_net.parameters(), 3.0)
             torch.nn.utils.clip_grad_norm_(criterion.parameters(), 1.0)
-            optimizer.step()
+            scaler.step(optimizer)
+            scaler.update()
             
             total_loss = total_loss + loss
             iteration += 1
@@ -166,7 +177,7 @@ def train(model_path):
     #save model
     embedder_net.eval().cpu()
     ckpt_model_filename = "ckpt_final.pth"
-    ckpt_model_path = os.path.join(hp.train.checkpoint_dir, ckpt_criterion_filename)
+    ckpt_model_path = os.path.join(hp.train.checkpoint_dir, ckpt_model_filename)
     torch.save(embedder_net.state_dict(), ckpt_model_path)
     
     print("\nDone, trained model saved at", ckpt_model_path)
