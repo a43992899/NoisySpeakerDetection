@@ -305,14 +305,14 @@ class SubcenterArcMarginProduct(nn.Module):
             cosine = torch.reshape(cosine, (-1, self.out_features, self.K))
             cosine, _ = torch.max(cosine, axis=2)
         
-        sine = torch.sqrt((1.0 - torch.pow(cosine, 2)).clamp(0, 1))
+        sine = torch.sqrt((1.0 - torch.mul(cosine, cosine)).clamp(0, 1))
         #cos(phi+m)
         phi = cosine * self.cos_m - sine * self.sin_m
 
         if self.easy_margin:
             phi = torch.where(cosine > 0, phi, cosine)
         else:
-            phi = torch.where(cosine > self.th, phi, cosine - self.mm)
+            phi = torch.where((cosine - self.th) > 0, phi, cosine - self.mm)
 
         # --------------------------- convert label to one-hot ---------------------------
         # one_hot = torch.zeros(cosine.size(), requires_grad=True, device='cuda')
