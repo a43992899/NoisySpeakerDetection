@@ -221,23 +221,27 @@ class BetaMixture1D(object):
     def __str__(self):
         return 'BetaMixture1D(w={}, a={}, b={})'.format(self.weight, self.alphas, self.betas)
 
-def fit_bmm(data, normalization=False):
+def fit_bmm(data, normalization=True, rm_outliers=False, max_iters=10,):
     bmm_model_max, bmm_model_min = None, None
     if normalization:
-        # outliers detection
-        max_perc = np.percentile(data, 95)
-        min_perc = np.percentile(data, 5)
-        data = data[(data<=max_perc) & (data>=min_perc)]
+        if rm_outliers:
+            # outliers detection
+            max_perc = np.percentile(data, 95)
+            min_perc = np.percentile(data, 5)
+            data = data[(data<=max_perc) & (data>=min_perc)]
 
-        bmm_model_max = max_perc
-        bmm_model_min = min_perc + 10e-6
+            bmm_model_max = max_perc
+            bmm_model_min = min_perc + 10e-6
+        else:
+            bmm_model_max = data.max()
+            bmm_model_min = data.min() + 10e-6
 
         data = (data - bmm_model_min) / (bmm_model_max - bmm_model_min + 1e-6)
 
         data[data>=1] = 1-10e-4
         data[data <= 0] = 10e-4
 
-    bmm_model = BetaMixture1D(max_iters=10)
+    bmm_model = BetaMixture1D(max_iters=max_iters)
     bmm_model.fit(data)
 
     bmm_model.create_lookup(1)
