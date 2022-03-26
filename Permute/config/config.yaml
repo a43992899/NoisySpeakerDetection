@@ -1,4 +1,4 @@
-stage: train # [train, test, nld]
+stage: nld # [train, test, nld]
 device: "cuda"
 ---
 data:
@@ -27,14 +27,14 @@ train:
     num_workers: 6 #number of workers for dataloader
     lr: 0.0001 
     optimizer: Adam # "Adam"
-    loss: AAM
+    loss: CE
     s: 15
     m: 0.1
-    K: 20
+    K: 3
     epochs: 3200 #Max training speaker epoch 
     log_interval: 20 #Epochs before printing progress
     checkpoint_interval: 20 #Save model after x speaker epochs
-    checkpoint_dir: /home/yrb/code/speechbrain/data/models/Permute/AAM/75%/m0.1_s15_bs256
+    checkpoint_dir: /home/yrb/code/speechbrain/data/models/Permute/Softmax/75%/bs256
     model_path: /home/yrb/code/speechbrain/data/models/Permute/AAM/75%/m0.1_s15_bs128/ckpt_epoch_320.pth
 ---
 test:
@@ -42,12 +42,13 @@ test:
     M : 6 #Number of utterances per speaker
     num_workers: 1 #number of workers for data laoder
     epochs: 300 #testing speaker epochs
-    model_path: /home/yrb/code/speechbrain/data/models/Permute/GE2E/75%/m16_bs128/ckpt_epoch_200.pth
+    model_path: /home/yrb/code/speechbrain/data/models/Permute/GE2E/50%/m8_bs128/ckpt_epoch_400.pth
 ---
 nld: # noisy label detection
-    noise_level: 20 # [0, 20, 40, 50 ,60, 75]
-    model_path: /home/yrb/code/speechbrain/data/models/Permute/AAM/exp3/ckpt_epoch_800.pth # 20%
+    noise_level: 50 # [0, 20, 40, 50 ,60, 75]
+    model_path: /home/yrb/code/speechbrain/data/models/Permute/GE2E/50%/m8_bs128/ckpt_epoch_200.pth
     ######## GE2E ##############
+    # /home/yrb/code/speechbrain/data/models/Permute/GE2E/50%/m8_bs128/ckpt_epoch_200.pth
     # /home/yrb/code/speechbrain/data/models/Permute/GE2E/75%/m16_bs128/ckpt_criterion_epoch_100.pth
     ######## Softmax #############
 
