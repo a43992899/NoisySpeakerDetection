@@ -251,6 +251,7 @@ def test(model_path):
 
         eer, thresh = compute_eer(ypreds, ylabels)
         print("eer:", eer, "threshold:", thresh)
+    print(model_path, 'eval done.')
 
 if __name__=="__main__":
     if hp.stage == 'train':

@@ -33,17 +33,22 @@ class SpeakerDatasetPreprocessed(Dataset):
         if hp.stage == "train":
             self.path = hp.data.train_path
             self.utter_num = hp.train.M
+            self.noise_type = hp.train.noise_type
             self.noise_level = hp.train.noise_level
         elif hp.stage == "test": # test EER
             self.path = hp.data.test_path
             self.utter_num = hp.test.M
+            self.noise_type = None
             self.noise_level = 0
         elif hp.stage == "nld": # noise label detection
             self.path = hp.data.nld_path
             self.utter_num = hp.nld.M
+            self.noise_type = hp.nld.noise_type
             self.noise_level = hp.nld.noise_level
         else:
             raise ValueError("stage should be train/test/nld")
+        assert self.noise_type in ["Permute", "Open", "Mix", None], "noise_type should be Permute/Open/Mix/None"
+        assert self.noise_level in [0, 20, 50, 75], "noise_level should be 0/20/50/75"
         self.get_spkr_id()
         self.length = int(len(self.spkr2id)*1)
         self.get_spkr2utter()
@@ -61,7 +66,6 @@ class SpeakerDatasetPreprocessed(Dataset):
         """
         self.file_list = os.listdir(self.path)
         self.file_list.sort()
-        assert self.noise_level in [0, 20, 40, 50 ,60, 75]
         if self.noise_level > 0:
             # mislabel_mapper maps a file to a wrong speaker
             with open(f"/home/yrb/code/speechbrain/data/jsons/Permute/voxceleb2_{self.noise_level}%_mislabel.json", "r") as f:
