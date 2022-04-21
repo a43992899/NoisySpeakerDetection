@@ -74,7 +74,21 @@ def get_optimizer(model, criterion):
         raise ValueError('Unknown optimizer')
     return optimizer
 
+def get_checkpoint_dir():
+    loss_type = hp.train.loss
+    if loss_type == 'CE':
+        loss_type = "Softmax"
+        sub_folder = f"bs{hp.train.N}"
+    elif loss_type == 'GE2E':
+        sub_folder = f"m{hp.train.M}_bs{hp.train.N}"
+    elif loss_type == 'AAM':
+        sub_folder = f"m{hp.train.m}_s{hp.train.s}_bs{hp.train.N}"
+    elif loss_type == 'AAMSC':
+        sub_folder = f"m{hp.train.m}_s{hp.train.s}_k{hp.train.K}_bs{hp.train.N}"
+    return os.path.join(hp.train.checkpoint_dir, f"{hp.train.noise_type}", loss_type, f"{hp.train.noise_level}%", sub_folder)
+
 def train(model_path):
+    hp.train.checkpoint_dir = get_checkpoint_dir()
     # create log
     if not hp.train.debug:
         os.makedirs(hp.train.checkpoint_dir, exist_ok=True)
@@ -255,8 +269,8 @@ def test(model_path):
 
 if __name__=="__main__":
     if hp.stage == 'train':
-        print("Train Permute Experiment")
+        print(f"Train {hp.train.noise_type} Experiment")
         train(hp.train.model_path)
     else:
-        print("Test Permute Experiment")
+        print("Test Experiment")
         test(hp.test.model_path)
