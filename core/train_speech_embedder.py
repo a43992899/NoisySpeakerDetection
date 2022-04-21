@@ -85,6 +85,8 @@ def get_checkpoint_dir():
         sub_folder = f"m{hp.train.m}_s{hp.train.s}_bs{hp.train.N}"
     elif loss_type == 'AAMSC':
         sub_folder = f"m{hp.train.m}_s{hp.train.s}_k{hp.train.K}_bs{hp.train.N}"
+    else:
+        raise ValueError('Unknown loss')
     return os.path.join(hp.train.checkpoint_dir, f"{hp.train.noise_type}", loss_type, f"{hp.train.noise_level}%", sub_folder)
 
 def train(model_path):
