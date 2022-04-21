@@ -5,6 +5,8 @@ data:
     train_path: '/home/yrb/code/speechbrain/data/voxceleb/vox2/spmel_single'
     test_path: '/home/yrb/code/speechbrain/data/voxceleb/vox1_test/spmel_single'
     nld_path: '/home/yrb/code/speechbrain/data/voxceleb/vox2/spmel_single'
+    vox1_path: '/home/yrb/code/speechbrain/data/voxceleb/vox1/spmel_single'
+    esc50_path: ''
     data_preprocessed: !!bool "true" 
     sr: 16000
     nfft: 512 #For mel spectrogram preprocess
