@@ -8,6 +8,7 @@ Created on Wed Sep  5 21:49:16 2018
 
 import os
 os.chdir(os.path.dirname(os.path.abspath(__file__))) # change to current file path
+import argparse
 import random
 import time, shutil
 import torch
@@ -15,7 +16,7 @@ from torch.utils.data import DataLoader
 import torch.nn.functional as F
 from torch.cuda.amp import autocast as autocast
 from torch.cuda.amp import GradScaler as GradScaler
-from hparam import hparam as hp
+from hparam import Hparam
 from data_load import SpeakerDatasetPreprocessed
 from speech_embedder_net import SpeechEmbedder, SpeechEmbedder_Softmax, GE2ELoss, GE2ELoss_, AngularPenaltySMLoss, AAMSoftmax,SubcenterArcMarginProduct, get_centroids, get_cossim
 from torch.utils.tensorboard import SummaryWriter
@@ -54,9 +55,9 @@ def get_criterion(device):
 
 def get_model(device):
     if hp.train.loss == 'CE':
-        embedder_net = SpeechEmbedder_Softmax(num_classes=5994).to(device)
+        embedder_net = SpeechEmbedder_Softmax(hp=hp, num_classes=5994).to(device)
     else:
-        embedder_net = SpeechEmbedder().to(device)
+        embedder_net = SpeechEmbedder(hp).to(device)
     return embedder_net
 
 def get_optimizer(model, criterion):
@@ -80,7 +81,8 @@ def get_checkpoint_dir():
         loss_type = "Softmax"
         sub_folder = f"bs{hp.train.N}"
     elif loss_type == 'GE2E':
-        sub_folder = f"m{hp.train.M}_bs{hp.train.N}"
+        bs = hp.train.M * hp.train.N
+        sub_folder = f"m{hp.train.M}_bs{bs}"
     elif loss_type == 'AAM':
         sub_folder = f"m{hp.train.m}_s{hp.train.s}_bs{hp.train.N}"
     elif loss_type == 'AAMSC':
@@ -91,17 +93,21 @@ def get_checkpoint_dir():
 
 def train(model_path):
     hp.train.checkpoint_dir = get_checkpoint_dir()
+    print('Will save checkpoints to:', hp.train.checkpoint_dir)
     # create log
     if not hp.train.debug:
         os.makedirs(hp.train.checkpoint_dir, exist_ok=True)
         log_dir = os.path.join(hp.train.checkpoint_dir, 'log')
         writer = SummaryWriter(log_dir)
-        shutil.copy('config/config.yaml', log_dir)
+        try:
+            shutil.copy(args.cfg, log_dir)
+        except shutil.SameFileError:
+            print('Config file already exists in log directory, skip copying')
 
     # init
     device = torch.device(hp.device)
     
-    train_dataset = SpeakerDatasetPreprocessed()
+    train_dataset = SpeakerDatasetPreprocessed(hp)
     train_loader = DataLoader(train_dataset, batch_size=hp.train.N, shuffle=True, num_workers=hp.train.num_workers, drop_last=True, pin_memory=True) 
     
     embedder_net = get_model(device)
@@ -189,6 +195,8 @@ def train(model_path):
             ckpt_criterion_path = os.path.join(hp.train.checkpoint_dir, ckpt_criterion_filename)
             torch.save(criterion.state_dict(), ckpt_criterion_path)
             criterion.to(device).train()
+            
+            print('Saved checkpoint to', ckpt_model_path)
 
     #save model
     embedder_net.eval().cpu()
@@ -205,15 +213,15 @@ def test(model_path):
     torch.manual_seed(0)
     torch.cuda.manual_seed_all(0)
     
-    test_dataset = SpeakerDatasetPreprocessed()
+    test_dataset = SpeakerDatasetPreprocessed(hp)
 
     test_loader = DataLoader(test_dataset, batch_size=hp.test.N, shuffle=True, num_workers=hp.test.num_workers, drop_last=True)
     
     try:
-        embedder_net = SpeechEmbedder().to(device)
+        embedder_net = SpeechEmbedder(hp).to(device)
         embedder_net.load_state_dict(torch.load(model_path))
     except:
-        embedder_net = SpeechEmbedder_Softmax(num_classes=5994).to(device)
+        embedder_net = SpeechEmbedder_Softmax(hp=hp, num_classes=5994).to(device)
         embedder_net.load_state_dict(torch.load(model_path))
     embedder_net.eval()
 
@@ -270,6 +278,12 @@ def test(model_path):
     print(model_path, 'eval done.')
 
 if __name__=="__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--cfg', type=str, default='config/config.yaml', help='config.yaml path')
+    args = parser.parse_args()
+
+    hp = Hparam(file=args.cfg)
+
     if hp.stage == 'train':
         print(f"Train {hp.train.noise_type} Experiment")
         train(hp.train.model_path)

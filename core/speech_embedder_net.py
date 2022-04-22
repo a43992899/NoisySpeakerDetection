@@ -12,12 +12,11 @@ import torch.nn.functional as F
 import numpy as np
 import math
 
-from hparam import hparam as hp
 from utils import get_centroids, get_cossim, calc_loss, accuracy
 
 class SpeechEmbedder(nn.Module):
     
-    def __init__(self):
+    def __init__(self, hp):
         super(SpeechEmbedder, self).__init__()    
         self.LSTM_stack = nn.LSTM(hp.data.nmels, hp.model.hidden, num_layers=hp.model.num_layer, batch_first=True)
         for name, param in self.LSTM_stack.named_parameters():
@@ -39,7 +38,7 @@ class SpeechEmbedder(nn.Module):
 
 class SpeechEmbedder_Softmax(nn.Module):
     
-    def __init__(self, num_classes):
+    def __init__(self, num_classes, hp):
         super(SpeechEmbedder_Softmax, self).__init__()    
         self.LSTM_stack = nn.LSTM(hp.data.nmels, hp.model.hidden, num_layers=hp.model.num_layer, batch_first=True)
         for name, param in self.LSTM_stack.named_parameters():

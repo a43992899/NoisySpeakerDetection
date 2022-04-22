@@ -15,8 +15,6 @@ from sklearn.metrics import roc_curve
 import scipy.stats as stats
 from matplotlib import pyplot as plt
 
-from hparam import hparam as hp
-
 def accuracy(output, target, topk=(1,)):
     """Computes the precision@k for the specified values of k"""
     maxk = max(topk)

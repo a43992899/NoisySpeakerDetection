@@ -13,7 +13,6 @@ from random import shuffle
 import torch
 from torch.utils.data import Dataset
 
-from hparam import hparam as hp
 from utils import mfccs_and_spec
 import time, json
 from tqdm import tqdm
@@ -29,19 +28,20 @@ def relabel(selected_file, utter_index, mislabel_dict):
 
 class SpeakerDatasetPreprocessed(Dataset):
     
-    def __init__(self):
+    def __init__(self, hp):
         self.vox1_path = hp.data.vox1_path
-        if hp.stage == "train":
+        self.stage = hp.stage
+        if self.stage == "train":
             self.path = hp.data.train_path
             self.utter_num = hp.train.M
             self.noise_type = hp.train.noise_type
             self.noise_level = hp.train.noise_level
-        elif hp.stage == "test": # test EER
+        elif self.stage == "test": # test EER
             self.path = hp.data.test_path
             self.utter_num = hp.test.M
             self.noise_type = None
             self.noise_level = 0
-        elif hp.stage == "nld": # noise label detection
+        elif self.stage == "nld": # noise label detection
             self.path = hp.data.nld_path
             self.utter_num = hp.nld.M
             self.noise_type = hp.nld.noise_type
@@ -92,7 +92,7 @@ class SpeakerDatasetPreprocessed(Dataset):
                 # a vox1 file name, for ood noise
                 filename = speaker_id_or_filename
                 filepath = os.path.join(self.vox1_path, filename)
-                speaker_id = file[:-4]
+                speaker_id = file.split("_")[0]
                 if speaker_id not in self.spkr2utter_mislabel:
                     self.spkr2utter_mislabel[speaker_id] = []
                 self.spkr2utter_mislabel[speaker_id].append(filepath)
@@ -108,7 +108,7 @@ class SpeakerDatasetPreprocessed(Dataset):
 
     def __getitem__(self, idx):
         selected_spkr = self.id2spkr[idx]
-        if hp.stage == "train" or hp.stage == "nld":
+        if self.stage in ["train", "nld"]:
             utters = self.spkr2utter_mislabel[selected_spkr]
         else:
             utters = self.spkr2utter[selected_spkr]

@@ -25,20 +25,20 @@ train:
     restore: !!bool "false" #Resume training from previous model path
     noise_type: Mix # [Permute, Open, Mix]
     noise_level: 75 # [0, 20, 50, 75]
-    N : 128 #Number of speakers in batch
-    M : 1 #Number of utterances per speaker
+    N : 8 #Number of speakers in batch
+    M : 16 #Number of utterances per speaker
     num_workers: 6 #number of workers for dataloader
     lr: 0.0001 
     optimizer: Adam # "Adam"
-    loss: CE
+    loss: GE2E # [CE, GE2E, AAM, AAMSC]
     s: 15
     m: 0.1
     K: 10
-    epochs: 1600 #Max training speaker epoch 
+    epochs: 400 #Max training speaker epoch 
     log_interval: 20 #Epochs before printing progress
-    checkpoint_interval: 40 #Save model after x speaker epochs
+    checkpoint_interval: 20 #Save model after x speaker epochs
     checkpoint_dir: /home/yrb/code/speechbrain/data/models/
-    model_path: /home/yrb/code/speechbrain/data/models/Permute/AAMSC/75%/m0.1_s15_k10_bs256/ckpt_epoch_3200.pth
+    model_path: 
 ---
 test:
     N : 10 #Number of speakers in batch

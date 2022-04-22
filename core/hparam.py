@@ -57,5 +57,4 @@ class Hparam(Dotdict):
     __setattr__ = Dotdict.__setitem__
     __delattr__ = Dotdict.__delitem__
 
-        
-hparam = Hparam()
+
