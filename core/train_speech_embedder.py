@@ -77,6 +77,7 @@ def get_optimizer(model, criterion):
 
 def get_checkpoint_dir():
     loss_type = hp.train.loss
+    assert hp.train.noise_type in ['Permute', 'Open', 'Mix'], 'Unknown noise type'
     if loss_type == 'CE':
         loss_type = "Softmax"
         sub_folder = f"bs{hp.train.N}"
@@ -195,7 +196,7 @@ def train(model_path):
             ckpt_criterion_path = os.path.join(hp.train.checkpoint_dir, ckpt_criterion_filename)
             torch.save(criterion.state_dict(), ckpt_criterion_path)
             criterion.to(device).train()
-            
+
             print('Saved checkpoint to', ckpt_model_path)
 
     #save model
