@@ -5,6 +5,7 @@ Created on Thu Sep 20 16:56:19 2018
 @author: harry
 """
 import librosa
+import os, sys
 import numpy as np
 import torch
 import torch.autograd as grad
@@ -14,6 +15,22 @@ from scipy.interpolate import interp1d
 from sklearn.metrics import roc_curve
 import scipy.stats as stats
 from matplotlib import pyplot as plt
+
+def get_all_file_with_ext(path, ext):
+    for root, dirs, files in os.walk(path):
+        for file in files:
+            if file.endswith(ext):
+                yield os.path.join(root, file)
+
+def isTarget(file, target_strings):
+    for target_string in target_strings:
+        if target_string in file:
+            return True
+    return False
+
+def write_to_csv(csv_path, line):
+    with open(csv_path, 'a') as f:
+        f.write(line)
 
 def accuracy(output, target, topk=(1,)):
     """Computes the precision@k for the specified values of k"""

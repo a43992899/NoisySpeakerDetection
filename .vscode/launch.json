@@ -4,10 +4,10 @@
     // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
+
         {
             "args": [
-                "/home/yrb/code/speechbrain/recipes/CommonLanguage/lang_id/hparams/train_ecapa_tdnn.yaml",
-                "--data_folder=/home/yrb/code/speechbrain/data/common_voice_kpd/"
+                "--csv", "/home/yrb/code/speechbrain/data/Permute_noise_test_results.csv"
             ],
             "name": "Python: Current File",
             "type": "python",

@@ -28,7 +28,7 @@ from numpy.linalg import solve
 import scipy.linalg
 import scipy.stats
 from tqdm import tqdm
-from utils import compute_eer
+from utils import compute_eer, get_all_file_with_ext, isTarget, write_to_csv
 
 random.seed(1)
 np.random.seed(1)
@@ -120,7 +120,7 @@ def train(model_path):
         embedder_net.load_state_dict(torch.load(model_path))
         try:
             criterion.load_state_dict(torch.load(model_path.replace('ckpt_epoch', 'ckpt_criterion_epoch')))
-            criterion.m = hp.train.m
+            # criterion.m = hp.train.m
             print('Loaded criterion')
         except:
             pass
@@ -207,7 +207,7 @@ def train(model_path):
     
     print("\nDone, trained model saved at", ckpt_model_path)
 
-def test(model_path):
+def test_one(model_path):
     print(model_path)
     device = torch.device(hp.device)
     random.seed(0)
@@ -277,10 +277,57 @@ def test(model_path):
         eer, thresh = compute_eer(ypreds, ylabels)
         print("eer:", eer, "threshold:", thresh)
     print(model_path, 'eval done.')
+    return eer, thresh
+
+def test(csv_path):
+    isFile = os.path.isfile(hp.test.model_path)
+    isDir = os.path.isdir(hp.test.model_path)
+    if isFile:
+        test_one(hp.test.model_path)
+    elif isDir:
+        if not os.path.exists(csv_path):
+            csv_header_line = 'ModelPath,EER(%),Threshold(%)\n'
+            write_to_csv(csv_path, csv_header_line)
+            tested_model_paths = []
+        else:
+            # read csv, get the model paths
+            csv_file = open(csv_path, 'r')
+            csv_lines = csv_file.readlines()
+            csv_file.close()
+            tested_model_paths = [line.split(',')[0] for line in csv_lines[1:]]
+
+        pth_list = list(get_all_file_with_ext(hp.test.model_path, '.pth'))
+        pth_list.sort()
+        for file in pth_list:
+            if 'ckpt_criterion_epoch' in file or file in tested_model_paths:
+                continue
+            else:
+                file_to_test = None
+                if '/GE2E/' in file:
+                    if isTarget(file, target_strings=['ckpt_epoch_100.pth', 'ckpt_epoch_200.pth', 'ckpt_epoch_300.pth', 'ckpt_epoch_400.pth', 'ckpt_epoch_800.pth']):
+                        file_to_test = file
+                    else:
+                        continue
+                elif isTarget(file, target_strings=['/Softmax/', '/AAM/', '/AAMSC/']):
+                    if 'bs128' in file and 'ckpt_epoch_1600.pth' in file:
+                        file_to_test = file
+                    elif 'bs256' in file and 'ckpt_epoch_3200.pth' in file:
+                        file_to_test = file
+                    else:
+                        continue
+                else:
+                    continue
+                eer, thresh = test_one(file_to_test)
+                csv_line = f"{file_to_test},{eer*100},{thresh*100}\n"
+                write_to_csv(csv_path, csv_line)
+                
+    else:
+        print("model_path is not a file or a directory")
 
 if __name__=="__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--cfg', type=str, default='config/config.yaml', help='config.yaml path')
+    parser.add_argument('--csv', type=str, default='../data/test_results.csv', help='csv path for writing test results')
     args = parser.parse_args()
 
     hp = Hparam(file=args.cfg)
@@ -290,4 +337,4 @@ if __name__=="__main__":
         train(hp.train.model_path)
     else:
         print("Test Experiment")
-        test(hp.test.model_path)
+        test(args.csv)
