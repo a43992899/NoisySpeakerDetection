@@ -31,6 +31,7 @@ torch.manual_seed(1)
 # print("current dir: ", os.getcwd())
 hp = Hparam(file='config/config.yaml')
 hp.stage = 'nld'
+skip_plot_list = ['/home/yrb/code/speechbrain/data/models/Permute/GE2E/75%/m16_bs256/ckpt_epoch_100.pth']
 def get_n_params(model):
     model_parameters = filter(lambda p: p.requires_grad, model.parameters())
     params = sum([np.prod(p.size()) for p in model_parameters])
@@ -81,7 +82,7 @@ torch.manual_seed(0)
 torch.cuda.manual_seed_all(0)
 
 
-def eval_one(model_path, stop_batch_id=500):
+def eval_one(model_path, stop_batch_id=500, skip_plot=False):
     # rewrite noise level and noise type
     noise_type, noise_level = model_path.split('/')[-5], model_path.split('/')[-3]
     noise_level = int(noise_level.replace('%', ''))
@@ -144,9 +145,12 @@ def eval_one(model_path, stop_batch_id=500):
     df = pd.DataFrame({"Distance": ypreds, "isNoisy": ylabels})
     # print("plot distance distribution")
     
-    sns.set()
-    distance_plot = sns.displot(df, x="Distance", hue="isNoisy")
-    distance_plot.fig.set_dpi(100)
+    if not skip_plot:
+        sns.set()
+        distance_plot = sns.displot(df, x="Distance", hue="isNoisy")
+        distance_plot.fig.set_dpi(100)
+    else:
+        distance_plot = None
 
     bmm_model, bmm_model_max, bmm_model_min = fit_bmm(ypreds, max_iters=50)
     # bmm_model.plot()
@@ -181,7 +185,7 @@ def evaluation(model_dir, csv_path, stop_batch_id=500):
     pth_list = list(get_all_file_with_ext(hp.nld.model_path, '.pth'))
     pth_list.sort()
     for file in pth_list:
-        if 'ckpt_criterion_epoch' in file or file in evaled_model_paths:
+        if 'ckpt_criterion_epoch' in file or file in evaled_model_paths or 'bs128' in file:
             continue
         else:
             file_to_eval = None
@@ -201,11 +205,12 @@ def evaluation(model_dir, csv_path, stop_batch_id=500):
                 continue
             print()
             print("Evaluating model: ", file_to_eval)
-            detection_precision, estimated_noise_level, real_noise_level, noise_level_label, distance_plot = eval_one(file_to_eval, stop_batch_id)
+            detection_precision, estimated_noise_level, real_noise_level, noise_level_label, distance_plot = eval_one(file_to_eval, stop_batch_id, skip_plot=file_to_eval in skip_plot_list)
             csv_line = f"{file_to_eval},{noise_level_label},{detection_precision*100},{estimated_noise_level*100},{real_noise_level}\n"
             write_to_csv(csv_path, csv_line)
             # get dir of file_to_eval
-            distance_plot.savefig(os.path.join(os.path.dirname(file_to_eval), "distance_distribution.png"))
+            if distance_plot is not None:
+                distance_plot.savefig(os.path.join(os.path.dirname(file_to_eval), "distance_distribution.png"))
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
