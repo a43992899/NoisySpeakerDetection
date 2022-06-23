@@ -13,7 +13,6 @@ from random import shuffle
 import torch
 from torch.utils.data import Dataset
 
-from hparam import hparam as hp
 from utils import mfccs_and_spec
 import time, json
 from tqdm import tqdm
@@ -29,24 +28,34 @@ def relabel(selected_file, utter_index, mislabel_dict):
 
 class SpeakerDatasetPreprocessed(Dataset):
     
-    def __init__(self):
-        if hp.stage == "train":
+    def __init__(self, hp):
+        self.vox1_path = hp.data.vox1_path
+        self.stage = hp.stage
+        if self.stage == "train":
             self.path = hp.data.train_path
             self.utter_num = hp.train.M
+            self.noise_type = hp.train.noise_type
             self.noise_level = hp.train.noise_level
-        elif hp.stage == "test": # test EER
+        elif self.stage == "test": # test EER
             self.path = hp.data.test_path
             self.utter_num = hp.test.M
+            self.noise_type = None
             self.noise_level = 0
-        elif hp.stage == "nld": # noise label detection
+        elif self.stage == "nld": # noise label detection
             self.path = hp.data.nld_path
             self.utter_num = hp.nld.M
+            self.noise_type = hp.nld.noise_type
             self.noise_level = hp.nld.noise_level
         else:
             raise ValueError("stage should be train/test/nld")
+        assert self.noise_type in ["Permute", "Open", "Mix", None], "noise_type should be Permute/Open/Mix/None"
+        assert self.noise_level in [0, 20, 50, 75], "noise_level should be 0/20/50/75"
         self.get_spkr_id()
         self.length = int(len(self.spkr2id)*1)
         self.get_spkr2utter()
+
+    def isFilename(self, inp):
+        return '.' in inp
     
     def get_spkr_id(self):
         spkr2id_json = os.path.join(self.path, "../spkr2id.json")
@@ -61,10 +70,9 @@ class SpeakerDatasetPreprocessed(Dataset):
         """
         self.file_list = os.listdir(self.path)
         self.file_list.sort()
-        assert self.noise_level in [0, 20, 40, 50 ,60, 75]
         if self.noise_level > 0:
             # mislabel_mapper maps a file to a wrong speaker
-            with open(f"/home/yrb/code/speechbrain/data/jsons/Permute/voxceleb2_{self.noise_level}%_mislabel.json", "r") as f:
+            with open(f"/home/yrb/code/speechbrain/data/jsons/{self.noise_type}/voxceleb2_{self.noise_level}%_mislabel.json", "r") as f:
                 mislabel_mapper = json.load(f)
         else:
             mislabel_mapper = {}
@@ -76,20 +84,31 @@ class SpeakerDatasetPreprocessed(Dataset):
             speaker_id = file.split("_")[0]
             if speaker_id not in self.spkr2utter:
                 self.spkr2utter[speaker_id] = []
-            self.spkr2utter[speaker_id].append(file)
+            self.spkr2utter[speaker_id].append(os.path.join(self.path, file))
 
             # if noise level is 0, then spkr2utter = spkr2utter_mislabel
-            speaker_id = mislabel_mapper.get(file[:-4], speaker_id)
-            if speaker_id not in self.spkr2utter_mislabel:
-                self.spkr2utter_mislabel[speaker_id] = []
-            self.spkr2utter_mislabel[speaker_id].append(file)
+            speaker_id_or_filename = mislabel_mapper.get(file[:-4], speaker_id)
+            if self.isFilename(speaker_id_or_filename):
+                # a vox1 file name, for ood noise
+                filename = speaker_id_or_filename
+                filepath = os.path.join(self.vox1_path, filename)
+                speaker_id = file.split("_")[0]
+                if speaker_id not in self.spkr2utter_mislabel:
+                    self.spkr2utter_mislabel[speaker_id] = []
+                self.spkr2utter_mislabel[speaker_id].append(filepath)
+            else:
+                # a speaker id label, for permute noise / clean samples
+                speaker_id = speaker_id_or_filename
+                if speaker_id not in self.spkr2utter_mislabel:
+                    self.spkr2utter_mislabel[speaker_id] = []
+                self.spkr2utter_mislabel[speaker_id].append(os.path.join(self.path, file))
         
     def __len__(self):
         return self.length
 
     def __getitem__(self, idx):
         selected_spkr = self.id2spkr[idx]
-        if hp.stage == "train" or hp.stage == "nld":
+        if self.stage in ["train", "nld"]:
             utters = self.spkr2utter_mislabel[selected_spkr]
         else:
             utters = self.spkr2utter[selected_spkr]
@@ -101,14 +120,15 @@ class SpeakerDatasetPreprocessed(Dataset):
             selected_utters = utters
         utterance_final, speaker_label, is_noisy, utterance_id = [], [], [], []
         for utter in selected_utters:
-            data = np.load(os.path.join(self.path, utter))
+            data = np.load(utter)
             utterance_final.extend(data)
             speaker_label.extend([idx])
-            if utter.split("_")[0] == selected_spkr:
+            utter_name = os.path.split(utter)[-1]
+            if utter_name.split("_")[0] == selected_spkr:
                 is_noisy.extend([0])
             else:
                 is_noisy.extend([1])
-            utterance_id.extend([utter])
+            utterance_id.extend([utter_name])
         utterance = np.array(utterance_final)
         utterance = utterance[:,:,:160]
         utterance = torch.tensor(np.transpose(utterance, axes=(0,2,1))) # transpose [batch, frames, n_mels]

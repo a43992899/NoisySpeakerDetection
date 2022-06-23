@@ -12,12 +12,11 @@ import torch.nn.functional as F
 import numpy as np
 import math
 
-from hparam import hparam as hp
 from utils import get_centroids, get_cossim, calc_loss, accuracy
 
 class SpeechEmbedder(nn.Module):
     
-    def __init__(self):
+    def __init__(self, hp):
         super(SpeechEmbedder, self).__init__()    
         self.LSTM_stack = nn.LSTM(hp.data.nmels, hp.model.hidden, num_layers=hp.model.num_layer, batch_first=True)
         for name, param in self.LSTM_stack.named_parameters():
@@ -39,7 +38,7 @@ class SpeechEmbedder(nn.Module):
 
 class SpeechEmbedder_Softmax(nn.Module):
     
-    def __init__(self, num_classes):
+    def __init__(self, num_classes, hp):
         super(SpeechEmbedder_Softmax, self).__init__()    
         self.LSTM_stack = nn.LSTM(hp.data.nmels, hp.model.hidden, num_layers=hp.model.num_layer, batch_first=True)
         for name, param in self.LSTM_stack.named_parameters():
@@ -305,14 +304,14 @@ class SubcenterArcMarginProduct(nn.Module):
             cosine = torch.reshape(cosine, (-1, self.out_features, self.K))
             cosine, _ = torch.max(cosine, axis=2)
         
-        sine = torch.sqrt((1.0 - torch.pow(cosine, 2)).clamp(0, 1))
+        sine = torch.sqrt((1.0 - torch.mul(cosine, cosine)).clamp(0, 1))
         #cos(phi+m)
         phi = cosine * self.cos_m - sine * self.sin_m
 
         if self.easy_margin:
             phi = torch.where(cosine > 0, phi, cosine)
         else:
-            phi = torch.where(cosine > self.th, phi, cosine - self.mm)
+            phi = torch.where((cosine - self.th) > 0, phi, cosine - self.mm)
 
         # --------------------------- convert label to one-hot ---------------------------
         # one_hot = torch.zeros(cosine.size(), requires_grad=True, device='cuda')
