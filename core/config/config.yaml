@@ -51,7 +51,7 @@ test:
 nld: # noisy label detection
     noise_type: Permute # [Permute, Open, Mix]
     noise_level: 20 # [0, 20, 50, 75]
-    model_path: /home/yrb/code/speechbrain/data/models/Permute/
+    model_path: /home/yrb/code/speechbrain/data/models/Permute/GE2E/0%/m4_bs128/ckpt_epoch_400.pth # /home/yrb/code/speechbrain/data/models/Permute/
     ######## GE2E ##############
     # /home/yrb/code/speechbrain/data/models/Permute/GE2E/0%/m4_bs128/ckpt_epoch_400.pth
     # /home/yrb/code/speechbrain/data/models/Permute/GE2E/20%/m8_bs128/ckpt_epoch_200.pth
