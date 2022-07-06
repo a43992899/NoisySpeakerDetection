@@ -1,3 +1,5 @@
+#!/bin/bash
+
 # /home/yrb/miniconda3/envs/speechbrain_ENV/bin/python /home/yrb/code/speechbrain/core/train_speech_embedder.py --cfg /home/yrb/code/speechbrain/data/models/Mix/Softmax/20%/bs128/log/config.yaml
 # /home/yrb/miniconda3/envs/speechbrain_ENV/bin/python /home/yrb/code/speechbrain/core/train_speech_embedder.py --cfg /home/yrb/code/speechbrain/data/models/Mix/Softmax/50%/bs128/log/config.yaml
 # /home/yrb/miniconda3/envs/speechbrain_ENV/bin/python /home/yrb/code/speechbrain/core/train_speech_embedder.py --cfg /home/yrb/code/speechbrain/data/models/Mix/Softmax/75%/bs128/log/config.yaml
