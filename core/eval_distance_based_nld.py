@@ -1,7 +1,7 @@
 import argparse
 import os
 import random
-os.chdir(os.path.dirname(os.path.abspath(__file__)))  # change to current file path
+from typing import Union
 
 import numpy as np
 import pandas as pd
@@ -16,6 +16,9 @@ from hparam import Hparam
 from data_load import SpeakerDatasetPreprocessed
 from speech_embedder_net import SpeechEmbedder, SpeechEmbedder_Softmax, \
     GE2ELoss_, AAMSoftmax, SubcenterArcMarginProduct, get_cossim
+
+
+os.chdir(os.path.dirname(os.path.abspath(__file__)))  # change to current file path
 
 random.seed(1)
 np.random.seed(1)
@@ -33,14 +36,10 @@ def get_n_params(model):
     return params
 
 
-def extract_emb(embedder_net, batch):
+def extract_emb(embedder_net: Union[SpeechEmbedder, SpeechEmbedder_Softmax], batch: Tensor):
     if batch.ndim == 4:
         batch = batch.reshape(-1, batch.size(2), batch.size(3))
-    if embedder_net.__class__.__name__ == 'SpeechEmbedder_Softmax':
-        embeddings = embedder_net.get_embedding(batch)
-    else:
-        embeddings = embedder_net(batch)
-    return embeddings
+    return embedder_net.get_embedding(batch)
 
 
 def get_criterion(device, model_path):
@@ -75,9 +74,9 @@ def get_criterion(device, model_path):
 
 
 device = torch.device(hp.device)
-random.seed(0)
-torch.manual_seed(0)
-torch.cuda.manual_seed_all(0)
+random.seed(1)
+torch.manual_seed(1)
+torch.cuda.manual_seed_all(1)
 
 
 def eval_one(model_path, stop_batch_id=500, skip_plot=False):

@@ -9,6 +9,7 @@ import argparse
 import os
 import random
 import shutil
+import sys
 import time
 from typing import Union
 
@@ -16,7 +17,7 @@ from typing import Union
 # So far, our script is so hard to be refactored.
 # Change current working directory to resolve relative import.
 # See `setup.cfg` in the project root directory. E402 check is ignored.
-os.chdir(os.path.dirname(os.path.abspath(__file__)))
+# os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
 from torch import nn
 from tqdm import tqdm
@@ -27,6 +28,7 @@ from torch.utils.data import DataLoader
 import numpy as np
 import torch
 
+from data_load import SpeakerDatasetPreprocessed
 from speech_embedder_net import SpeechEmbedder, SpeechEmbedder_Softmax, GE2ELoss_, AAMSoftmax, \
     SubcenterArcMarginProduct, get_centroids
 from hparam import Hparam
@@ -202,7 +204,7 @@ def train(model_path: str):
         model_path (str): Path to an exist PyTorch module
         if to resume training from a (possibly training-unfinished) module.
         Hyperparameter `hp.train.restore` must be `True`,
-        or the path to the exist PyTorch module is ignored. 
+        or the path to the exist PyTorch module is ignored.
 
     Raises:
         ValueError: _description_
@@ -252,8 +254,8 @@ def train(model_path: str):
             print('Loaded criterion')
         except BaseException:
             pass
-        restored_epoch = int(model_path.split(
-            '/')[-1].split('_')[-1].split('.')[0])
+        restored_epoch = int(model_path
+            .split('/')[-1].split('_')[-1].split('.')[0])
     else:
         restored_epoch = 0
 
@@ -520,6 +522,7 @@ def test(csv_path: str):
 
 
 if __name__ == "__main__":
+    print(sys.path)
     parser = argparse.ArgumentParser()
     parser.add_argument(
         '--cfg',

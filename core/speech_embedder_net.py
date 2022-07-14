@@ -7,7 +7,7 @@ Created on Wed Sep  5 20:58:34 2018
 """
 
 import torch
-import torch.nn as nn
+from torch import nn, Tensor
 import torch.nn.functional as F
 import numpy as np
 import math
@@ -35,6 +35,9 @@ class SpeechEmbedder(nn.Module):
         # print("Shape is: ", x.shape)
         return x
 
+    def get_embedding(self, x: Tensor) -> Tensor:
+        return self(x)
+
 
 class SpeechEmbedder_Softmax(nn.Module):
     def __init__(self, num_classes, hp):
@@ -53,32 +56,38 @@ class SpeechEmbedder_Softmax(nn.Module):
         self.bn1 = nn.BatchNorm1d(num_classes)
         self.softmax = nn.LogSoftmax(dim=1)
 
-    def forward(self, x):
+    def forward(self, x: Tensor) -> Tensor:
+        # x, _ = self.LSTM_stack(x.float())  # (batch, frames, n_mels)
+        # # only use last frame
+        # x = x[:, x.size(1) - 1]
+        # x = self.projection(x.float())
+        # x = x / torch.norm(x, dim=1).unsqueeze(1)
+        x = self.get_embedding(x)
+
+        x = self.projection2(x.float())
+        x = self.bn1(x)
+        x = self.softmax(x)
+        # x = self.get_confidence(x)
+
+        return x
+
+    def get_embedding(self, x: Tensor) -> Tensor:
         x, _ = self.LSTM_stack(x.float())  # (batch, frames, n_mels)
         # only use last frame
         x = x[:, x.size(1) - 1]
         x = self.projection(x.float())
         x = x / torch.norm(x, dim=1).unsqueeze(1)
+        return x
+
+    def get_confidence(self, x: Tensor) -> Tensor:
         x = self.projection2(x.float())
         x = self.bn1(x)
-        x = self.softmax(x)
-
+        x = F.softmax(x)
+        # x = self.softmax(x)
         return x
-
-    def get_embedding(self, x):
-        x, _ = self.LSTM_stack(x.float())  # (batch, frames, n_mels)
-        # only use last frame
-        x = x[:, x.size(1) - 1]
-        x = self.projection(x.float())
-        # x = x / torch.norm(x, dim=1).unsqueeze(1)
-
-        return x
-    
-    get_confidence = forward
 
 
 class GE2ELoss(nn.Module):
-
     def __init__(self, device):
         super(GE2ELoss, self).__init__()
         self.w = nn.Parameter(torch.tensor(10.0).to(device), requires_grad=True)
@@ -86,7 +95,7 @@ class GE2ELoss(nn.Module):
         self.cos = nn.CosineSimilarity(dim=-1, eps=1e-6)
         self.device = device
 
-    def forward(self, embeddings):
+    def forward(self, embeddings: Tensor) -> Tensor:
         torch.clamp(self.w, 1e-6)
         centroids = torch.mean(embeddings, dim=1)
         cossim = get_cossim(embeddings, centroids, self.cos)
@@ -96,7 +105,6 @@ class GE2ELoss(nn.Module):
 
 
 class GE2ELoss_(nn.Module):
-
     def __init__(self, init_w=10.0, init_b=-5.0, **kwargs):
         super(GE2ELoss_, self).__init__()
 
@@ -166,8 +174,8 @@ class AAMSoftmax(nn.Module):
         print('Initialised AAMSoftmax margin %.3f scale %.3f' % (self.m, self.s))
 
     # TODO: no one is calling this func? What is `label`?
-    def predict(self, x):
-        assert x.size()[0] == label.size()[0]
+    def predict(self, x: torch.Tensor):
+        # assert x.size()[0] == label.size()[0]
         assert x.size()[1] == self.in_feats
 
         # cos(theta)
@@ -204,7 +212,6 @@ class AAMSoftmax(nn.Module):
 
 # FIXME: this is deprecated
 class AngularPenaltySMLoss(nn.Module):
-
     def __init__(self, in_features, out_features, loss_type='arcface', eps=1e-7, s=None, m=None):
         '''
         Angular Penalty Softmax Loss
@@ -284,7 +291,7 @@ class SubcenterArcMarginProduct(nn.Module):
         self.mm = math.sin(math.pi - m) * m
         self.ce_loss = nn.CrossEntropyLoss()
 
-    def predict(self, input, label):
+    def predict(self, input: torch.Tensor):
         # --------------------------- cos(theta) & phi(theta) ---------------------------
         cosine = F.linear(F.normalize(input), F.normalize(self.weight))
 
@@ -306,6 +313,7 @@ class SubcenterArcMarginProduct(nn.Module):
         # you can use torch.where if your torch.__version__ is 0.4
         output = (one_hot * phi) + ((1.0 - one_hot) * cosine)
         output *= self.s
+
         return output
 
     def forward(self, input, label):
