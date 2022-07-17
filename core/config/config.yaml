@@ -51,7 +51,7 @@ test:
 nld: # noisy label detection
     noise_type: Permute # [Permute, Open, Mix]
     noise_level: 20 # [0, 20, 50, 75]
-    model_path: /home/yrb/code/speechbrain/data/models/Permute/Softmax/0%/bs128/ckpt_epoch_1600.pth
+    model_path: /home/yrb/code/speechbrain/data/models/Permute/GE2E/20%/m8_bs128/ckpt_epoch_200.pth
     ######## GE2E ##############
     # /home/yrb/code/speechbrain/data/models/Permute/GE2E/0%/m4_bs128/ckpt_epoch_400.pth
     # /home/yrb/code/speechbrain/data/models/Permute/GE2E/20%/m8_bs128/ckpt_epoch_200.pth
@@ -82,6 +82,6 @@ nld: # noisy label detection
     # /home/yrb/code/speechbrain/data/models/Permute/AAMSC/0%/m0.1_s15_k3_bs256/ckpt_epoch_3200.pth
     # /home/yrb/code/speechbrain/data/models/Permute/AAMSC/20%/m0.1_s15_k3_bs128/ckpt_epoch_3200.pth
     
-    N : 1 #Number of speakers in batch
-    M : -1 #Number of utterances per speaker (-1 means all)
+    N : 4 # 1 #Number of speakers in batch
+    M : 16 # -1 #Number of utterances per speaker (-1 means all)
     num_workers: 1 #number of workers for dataloader
