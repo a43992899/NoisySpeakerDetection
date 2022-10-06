@@ -1,78 +1,83 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Created on Wed Sep  5 21:49:16 2018
-
-@author: harry
-"""
-import argparse
 import os
 import random
 import shutil
-import sys
 import time
-from typing import Union
 
-# It is a very bad practice to blend library script with main routine.
-# So far, our script is so hard to be refactored.
-# Change current working directory to resolve relative import.
-# See `setup.cfg` in the project root directory. E402 check is ignored.
-# os.chdir(os.path.dirname(os.path.abspath(__file__)))
-
-from torch import nn
-from tqdm import tqdm
-from torch.utils.tensorboard import SummaryWriter
+import numpy as np
+import torch
 from torch.cuda.amp import GradScaler as GradScaler
 from torch.cuda.amp import autocast as autocast
 from torch.utils.data import DataLoader
-import numpy as np
-import torch
+from torch.utils.tensorboard import SummaryWriter
+from tqdm import tqdm
 
-from data_load import SpeakerDatasetPreprocessed
-from speech_embedder_net import SpeechEmbedder, SpeechEmbedder_Softmax, GE2ELoss_, AAMSoftmax, \
-    SubcenterArcMarginProduct, get_centroids
-from hparam import Hparam
-from utils import compute_eer, get_all_file_with_ext, isTarget, write_to_csv
+from nld.process_data.dataset import SpeakerDatasetPreprocessed
+from utils import (compute_eer, get_all_file_with_ext, isTarget,
+                   set_random_seed_to, write_to_csv)
 
-
-def get_n_params(model: nn.Module) -> int:
-    """Helper function to get the number of parameters in a module that can be trained.
-
-    Args:
-        model (nn.Module): The module to be acquired for its train-able parameters.
-
-    Returns:
-        int: The number of train-able parameters.
-    """
-    model_parameters = filter(lambda p: p.requires_grad, model.parameters())
-    params = sum([np.prod(p.size()) for p in model_parameters])
-
-    return params
+from .constant.config import Config, Hparam
+from .model.loss import (AAMSoftmax, GE2ELoss_, SpeechEmbedder,
+                         SpeechEmbedder_Softmax, SubcenterArcMarginProduct,
+                         get_centroids)
 
 
-def get_criterion(device: Union[str, torch.device]) -> nn.Module:
-    """Get a network training loss calculation criterion
-    according to the hyperparameter configuration file.
+def train(hp: Config, cfg: str):
+    model_path = hp.train.model_path
+    loss_type = hp.train.loss
+    if noise_type := hp.train.noise_type not in ['Permute', 'Open', 'Mix']:
+        raise NotImplementedError(f'Unsupported noise type {noise_type}')
+    assert hp.train.noise_type \
+        in ['Permute', 'Open', 'Mix'], 'Unknown noise type'
+    if loss_type == 'CE':
+        loss_type = "Softmax"
+        sub_folder = f"bs{hp.train.N}"
+    elif loss_type == 'GE2E':
+        bs = hp.train.M * hp.train.N
+        sub_folder = f"m{hp.train.M}_bs{bs}"
+    elif loss_type == 'AAM':
+        sub_folder = f"m{hp.train.m}_s{hp.train.s}_bs{hp.train.N}"
+    elif loss_type == 'AAMSC':
+        sub_folder = f"m{hp.train.m}_s{hp.train.s}_k{hp.train.K}_bs{hp.train.N}"
+    else:
+        raise ValueError('Unknown loss')
+    hp.train.checkpoint_dir = os.path.join(
+        hp.train.checkpoint_dir,
+        f"{hp.train.noise_type}",
+        loss_type,
+        f"{hp.train.noise_level}%",
+        sub_folder)
+    print('Will save checkpoints to:', hp.train.checkpoint_dir)
 
-    WARNING: this function is dependent on the global variable `hp`,
-    which is from the hyperparameter configuration file.
-    Variable `hp` must be exposed in this script on the global scope.
-    Do not call this function outside this module.
+    # Writing training log
+    if not hp.train.debug:
+        os.makedirs(hp.train.checkpoint_dir, exist_ok=True)
+        log_dir = os.path.join(hp.train.checkpoint_dir, 'log')
+        writer = SummaryWriter(log_dir)
+        try:
+            shutil.copy(cfg, log_dir)
+        except shutil.SameFileError:
+            print('Config file already exists in log directory, skip copying')
 
-    TODO: since we only use this function for once,
-    it can be safely inlined.
+    # Get the training device
+    device = torch.device(hp.device)
 
-    Args:
-        device (Union[str, torch.device]): the PyTorch computation device.
+    # Get the training dataset and data loader
+    train_dataset = SpeakerDatasetPreprocessed(hp)
+    train_data_loader = DataLoader(
+        train_dataset,
+        batch_size=hp.train.N,
+        shuffle=True,
+        num_workers=hp.train.num_workers,
+        drop_last=True,
+        pin_memory=True)
 
-    Raises:
-        NotImplementedError: If the network training loss
-        specified in the hyperparameter configuration file is not one of
-        `{'CE', 'GE2E', 'AAM', 'AAMSC'}`.
+    # Get neural network training components
+    if hp.train.loss == 'CE':
+        embedder_net = SpeechEmbedder_Softmax(
+            hp=hp, num_classes=5994).to(device)
+    else:
+        embedder_net = SpeechEmbedder(hp).to(device)
 
-    Returns:
-        nn.Module: The given network training loss calculation criterion.
-    """
     if hp.train.loss == 'CE':
         criterion = torch.nn.NLLLoss()
     elif hp.train.loss == 'GE2E':
@@ -96,149 +101,19 @@ def get_criterion(device: Union[str, torch.device]) -> nn.Module:
             K=hp.train.K).to(device)
     else:
         raise NotImplementedError('Unknown loss')
-    return criterion
 
-
-def get_model(device: Union[str, torch.device]) -> nn.Module:
-    """Get the training module
-    according to the hyperparameter configuration file.
-
-    WARNING: this function is dependent on the global variable `hp`,
-    which is from the hyperparameter configuration file.
-    Variable `hp` must be exposed in this script on the global scope.
-    Do not call this function outside this module.
-
-    TODO: since we only use this function for once,
-    it can be safely inlined.
-
-    Args:
-        device (Union[str, torch.device]): the PyTorch computation device.
-
-    Returns:
-        nn.Module: The training module.
-    """
-    if hp.train.loss == 'CE':
-        embedder_net = SpeechEmbedder_Softmax(
-            hp=hp, num_classes=5994).to(device)
-    else:
-        embedder_net = SpeechEmbedder(hp).to(device)
-    return embedder_net
-
-
-def get_optimizer(
-        model: nn.Module,
-        criterion: nn.Module) -> torch.optim.Optimizer:
-    """Get a optimizer according to the hyperparameter configuration file.
-
-    WARNING: this function is dependent on the global variable `hp`,
-    which is from the hyperparameter configuration file.
-    Variable `hp` must be exposed in this script on the global scope.
-    Do not call this function outside this module.
-
-    TODO: since we only use this function for once,
-    it can be safely inlined.
-
-    Args:
-        model (nn.Module): The module to be optimized
-        criterion (_type_): The network training loss calculation criterion.
-        See function `get_criterion`.
-
-    Raises:
-        NotImplementedError: If the optimizer specified in the hyperparameter
-        configuration file is not 'Adam' or 'SGD'.
-
-    Returns:
-        torch.optim.Optimizer: The given optimizer.
-    """
     if hp.train.optimizer == 'Adam':
         optimizer = torch.optim.Adam([
-            {'params': model.parameters()},
+            {'params': embedder_net.parameters()},
             {'params': criterion.parameters()}
         ], lr=hp.train.lr)
     elif hp.train.optimizer == 'SGD':
         optimizer = torch.optim.SGD([
-            {'params': model.parameters()},
+            {'params': embedder_net.parameters()},
             {'params': criterion.parameters()}
         ], lr=hp.train.lr, momentum=0.9, weight_decay=5e-4)
     else:
-        raise NotImplementedError(
-            f'Unsupported module optimizer {hp.train.optimizer}.')
-    return optimizer
-
-
-def get_checkpoint_dir() -> str:
-    loss_type = hp.train.loss
-    if noise_type := hp.train.noise_type not in ['Permute', 'Open', 'Mix']:
-        raise NotImplementedError(f'Unsupported noise type {noise_type}')
-    assert hp.train.noise_type \
-        in ['Permute', 'Open', 'Mix'], 'Unknown noise type'
-    if loss_type == 'CE':
-        loss_type = "Softmax"
-        sub_folder = f"bs{hp.train.N}"
-    elif loss_type == 'GE2E':
-        bs = hp.train.M * hp.train.N
-        sub_folder = f"m{hp.train.M}_bs{bs}"
-    elif loss_type == 'AAM':
-        sub_folder = f"m{hp.train.m}_s{hp.train.s}_bs{hp.train.N}"
-    elif loss_type == 'AAMSC':
-        sub_folder = f"m{hp.train.m}_s{hp.train.s}_k{hp.train.K}_bs{hp.train.N}"
-    else:
-        raise ValueError('Unknown loss')
-    return os.path.join(
-        hp.train.checkpoint_dir,
-        f"{hp.train.noise_type}",
-        loss_type,
-        f"{hp.train.noise_level}%",
-        sub_folder)
-
-
-def train(model_path: str):
-    """The main training routine.
-
-    WARNING: this function is dependent on the global variable `hp`,
-    which is from the hyperparameter configuration file.
-    Variable `hp` must be exposed in this script on the global scope.
-    Do not call this function outside this module.
-
-    Args:
-        model_path (str): Path to an exist PyTorch module
-        if to resume training from a (possibly training-unfinished) module.
-        Hyperparameter `hp.train.restore` must be `True`,
-        or the path to the exist PyTorch module is ignored.
-
-    Raises:
-        ValueError: _description_
-    """
-    hp.train.checkpoint_dir = get_checkpoint_dir()
-    print('Will save checkpoints to:', hp.train.checkpoint_dir)
-
-    # Writing training log
-    if not hp.train.debug:
-        os.makedirs(hp.train.checkpoint_dir, exist_ok=True)
-        log_dir = os.path.join(hp.train.checkpoint_dir, 'log')
-        writer = SummaryWriter(log_dir)
-        try:
-            shutil.copy(args.cfg, log_dir)
-        except shutil.SameFileError:
-            print('Config file already exists in log directory, skip copying')
-
-    # Get the training device
-    device = torch.device(hp.device)
-
-    # Get the training dataset and data loader
-    train_dataset = SpeakerDatasetPreprocessed(hp)
-    train_data_loader = DataLoader(
-        train_dataset,
-        batch_size=hp.train.N,
-        shuffle=True,
-        num_workers=hp.train.num_workers,
-        drop_last=True,
-        pin_memory=True)
-
-    # Get neural network training components
-    embedder_net = get_model(device)
-    criterion = get_criterion(device)
-    optimizer = get_optimizer(embedder_net, criterion)
+        raise NotImplementedError(f'Unsupported module optimizer {hp.train.optimizer}.')
     scaler = GradScaler()
 
     # If we are about to resume the progress of a previous training
@@ -246,20 +121,15 @@ def train(model_path: str):
         embedder_net.load_state_dict(torch.load(model_path))
         try:
             criterion.load_state_dict(
-                torch.load(
-                    model_path.replace(
-                        'ckpt_epoch',
-                        'ckpt_criterion_epoch')))
+                torch.load(model_path.replace('ckpt_epoch', 'ckpt_criterion_epoch')))
             # criterion.m = hp.train.m
             print('Loaded criterion')
         except BaseException:
-            pass
-        restored_epoch = int(model_path
-            .split('/')[-1].split('_')[-1].split('.')[0])
+            ...
+        restored_epoch = int(model_path.split('/')[-1].split('_')[-1].split('.')[0])
     else:
         restored_epoch = 0
 
-    # Set the module in training mode
     embedder_net.train()
 
     # Record training iteration
@@ -360,15 +230,14 @@ def train(model_path: str):
     # Save model
     embedder_net.eval().cpu()
     ckpt_model_filename = "ckpt_final.pth"
-    ckpt_model_path = os.path.join(
-        hp.train.checkpoint_dir,
-        ckpt_model_filename)
+    ckpt_model_path = os.path.join(hp.train.checkpoint_dir, ckpt_model_filename)
     torch.save(embedder_net.state_dict(), ckpt_model_path)
 
     print("\nDone, trained model saved at", ckpt_model_path)
 
 
-def test_one(model_path: str):
+def test_one(hp: Config):
+    model_path = hp.test.model_path
     print(model_path)
     device = torch.device(hp.device)
     random.seed(0)
@@ -393,17 +262,15 @@ def test_one(model_path: str):
         embedder_net.load_state_dict(torch.load(model_path))
     embedder_net.eval()
 
-    print("Number of params: ", get_n_params(embedder_net))
-
-    # TODO: unused variable?
-    # avg_EER = 0
+    model_parameters = filter(lambda p: p.requires_grad, embedder_net.parameters())
+    num_params = sum([np.prod(p.size()) for p in model_parameters])
+    print("Number of params: ", num_params)
 
     ypreds = []
     ylabels = []
 
     for _ in range(hp.test.epochs):
-        for batch_id, (mel_db_batch, labels, is_noisy,
-                       utterance_ids) in enumerate(tqdm(test_loader)):
+        for batch_id, (mel_db_batch, labels, is_noisy, utterance_ids) in enumerate(tqdm(test_loader)):
             assert hp.test.M % 2 == 0
 
             utterance_ids = np.array(utterance_ids).T
@@ -471,9 +338,9 @@ def test_one(model_path: str):
     return eer, thresh
 
 
-def test(csv_path: str):
+def test(hp: Config, csv_path: str):
     if os.path.isfile(hp.test.model_path):
-        test_one(hp.test.model_path)
+        test_one(hp)
     elif os.path.isdir(hp.test.model_path):
         if not os.path.exists(csv_path):
             csv_header_line = 'ModelPath,EER(%),Threshold(%)\n'
@@ -521,37 +388,13 @@ def test(csv_path: str):
         print("model_path is not a file or a directory")
 
 
-if __name__ == "__main__":
-    print(sys.path)
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        '--cfg',
-        type=str,
-        default='config/config.yaml',
-        help='config.yaml path')
-    parser.add_argument(
-        '--csv',
-        type=str,
-        default='../data/test_results.csv',
-        help='csv path for writing test results')
-    args = parser.parse_args()
+def main(args):
+    set_random_seed_to(1)
 
-    # FIXME: having hp to be a global variable and be consumed by
-    # other functions in this module is a very bad coding practice.
-    # Since the module is very convoluted in variable and function dependency,
-    # It would be hard to refactor the logic.
-    hp = Hparam(file=args.cfg)
-
-    # Set the random seed to be consistent.
-    # Having a consistent random seed, order of random number generation
-    # can be predictable, leading to reimplementable training.
-    random.seed(1)
-    np.random.seed(1)
-    torch.manual_seed(1)
-
+    hp = Hparam(args.cfg)
     if hp.stage == 'train':
         print(f"Train {hp.train.noise_type} Experiment")
-        train(hp.train.model_path)
+        train(hp, args.cfg)
     else:
         print("Test Experiment")
-        test(args.csv)
+        test(hp, args.csv)

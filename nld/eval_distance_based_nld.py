@@ -9,14 +9,13 @@ import seaborn as sns
 import torch
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-from utils import fit_bmm
 
-from utils import get_all_file_with_ext, isTarget, write_to_csv
-from hparam import Hparam
-from data_load import SpeakerDatasetPreprocessed
-from speech_embedder_net import SpeechEmbedder, SpeechEmbedder_Softmax, \
-    GE2ELoss_, AAMSoftmax, SubcenterArcMarginProduct, get_cossim
-
+from .constant.config import Hparam
+from .process_data.dataset import SpeakerDatasetPreprocessed
+from .model.loss import (AAMSoftmax, GE2ELoss_, SpeechEmbedder,
+                         SpeechEmbedder_Softmax, SubcenterArcMarginProduct,
+                         get_cossim)
+from .utils import fit_bmm, get_all_file_with_ext, isTarget, write_to_csv
 
 os.chdir(os.path.dirname(os.path.abspath(__file__)))  # change to current file path
 

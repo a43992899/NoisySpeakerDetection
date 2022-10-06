@@ -6,85 +6,14 @@ Created on Wed Sep  5 20:58:34 2018
 @author: harry
 """
 
-import torch
-from torch import nn, Tensor
-import torch.nn.functional as F
-import numpy as np
 import math
 
-from utils import get_centroids, get_cossim, calc_loss, accuracy
+import numpy as np
+import torch
+import torch.nn.functional as F
+from torch import Tensor, nn
 
-
-class SpeechEmbedder(nn.Module):
-    def __init__(self, hp):
-        super(SpeechEmbedder, self).__init__()
-        self.LSTM_stack = nn.LSTM(hp.data.nmels, hp.model.hidden, num_layers=hp.model.num_layer, batch_first=True)
-        for name, param in self.LSTM_stack.named_parameters():
-            if 'bias' in name:
-                nn.init.constant_(param, 0.0)
-            elif 'weight' in name:
-                nn.init.xavier_normal_(param)
-        self.projection = nn.Linear(hp.model.hidden, hp.model.proj)
-
-    def forward(self, x):
-        x, _ = self.LSTM_stack(x.float())  # (batch, frames, n_mels)
-        # only use last frame
-        x = x[:, x.size(1) - 1]
-        x = self.projection(x.float())
-        x = x / torch.norm(x, dim=1).unsqueeze(1)
-        # print("Shape is: ", x.shape)
-        return x
-
-    def get_embedding(self, x: Tensor) -> Tensor:
-        return self(x)
-
-
-class SpeechEmbedder_Softmax(nn.Module):
-    def __init__(self, num_classes, hp):
-        super(SpeechEmbedder_Softmax, self).__init__()
-        self.LSTM_stack = nn.LSTM(hp.data.nmels, hp.model.hidden, num_layers=hp.model.num_layer, batch_first=True)
-        for name, param in self.LSTM_stack.named_parameters():
-            if 'bias' in name:
-                nn.init.constant_(param, 0.0)
-            elif 'weight' in name:
-                nn.init.xavier_normal_(param)
-        self.projection = nn.Linear(hp.model.hidden, hp.model.proj)
-
-        # Classification purpose
-        # self.relu1 = nn.ReLU()
-        self.projection2 = nn.Linear(hp.model.proj, num_classes)
-        self.bn1 = nn.BatchNorm1d(num_classes)
-        self.softmax = nn.LogSoftmax(dim=1)
-
-    def forward(self, x: Tensor) -> Tensor:
-        # x, _ = self.LSTM_stack(x.float())  # (batch, frames, n_mels)
-        # # only use last frame
-        # x = x[:, x.size(1) - 1]
-        # x = self.projection(x.float())
-        # x = x / torch.norm(x, dim=1).unsqueeze(1)
-        x = self.get_embedding(x)
-
-        x = self.projection2(x.float())
-        x = self.bn1(x)
-        x = self.softmax(x)
-        # x = self.get_confidence(x)
-
-        return x
-
-    def get_embedding(self, x: Tensor) -> Tensor:
-        x, _ = self.LSTM_stack(x.float())  # (batch, frames, n_mels)
-        # only use last frame
-        x = x[:, x.size(1) - 1]
-        x = self.projection(x.float())
-        x = x / torch.norm(x, dim=1).unsqueeze(1)
-        return x
-
-    def get_confidence(self, x: Tensor) -> Tensor:
-        x = self.projection2(x.float())
-        x = self.bn1(x)
-        x = F.softmax(x)
-        # x = self.softmax(x)
-        return x
+from utils import accuracy, calc_loss, get_cossim
 
 
 # TODO: this class is already deprecated
@@ -172,8 +101,6 @@ class GE2ELoss_(nn.Module):
         torch.clamp(self.w, 1e-6)
         cos_sim_matrix = cos_sim_matrix * self.w + self.b
 
-        
-
         label = torch.from_numpy(np.asarray(range(0, stepsize))).cuda()
         nloss = self.criterion(cos_sim_matrix.view(-1, stepsize),
                                torch.repeat_interleave(label, repeats=gsize, dim=0).cuda())
@@ -185,6 +112,7 @@ class GE2ELoss_(nn.Module):
 class AAMSoftmax(nn.Module):
     """AAM Loss Criterion
     """
+
     def __init__(self, nOut, nClasses, margin=0.3, scale=15, easy_margin=False, **kwargs):
         super(AAMSoftmax, self).__init__()
 
@@ -292,10 +220,16 @@ class AngularPenaltySMLoss(nn.Module):
             numerator = self.s * (torch.diagonal(wf.transpose(0, 1)[labels]) - self.m)
         if self.loss_type == 'arcface':
             numerator = self.s * \
-                torch.cos(torch.acos(torch.clamp(torch.diagonal(wf.transpose(0, 1)[labels]), -1. + self.eps, 1 - self.eps)) + self.m)
+                torch.cos(
+                    torch.acos(
+                        torch.clamp(
+                            torch.diagonal(
+                                wf.transpose(
+                                    0, 1)[labels]), -1. + self.eps, 1 - self.eps)) + self.m)
         if self.loss_type == 'sphereface':
             numerator = self.s * \
-                torch.cos(self.m * torch.acos(torch.clamp(torch.diagonal(wf.transpose(0, 1)[labels]), -1. + self.eps, 1 - self.eps)))
+                torch.cos(
+                    self.m * torch.acos(torch.clamp(torch.diagonal(wf.transpose(0, 1)[labels]), -1. + self.eps, 1 - self.eps)))
 
         excl = torch.cat([torch.cat((wf[i, :y], wf[i, y + 1:])).unsqueeze(0) for i, y in enumerate(labels)], dim=0)
         denominator = torch.exp(numerator) + torch.sum(torch.exp(self.s * excl), dim=1)
