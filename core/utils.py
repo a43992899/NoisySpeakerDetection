@@ -5,6 +5,8 @@ Created on Thu Sep 20 16:56:19 2018
 @author: harry
 """
 import os
+import random
+from pathlib import Path
 from typing import Generator, List
 
 import librosa
@@ -20,6 +22,18 @@ from scipy.interpolate import interp1d
 from sklearn.metrics import roc_curve
 
 
+def set_random_seed_to(seed: int = 1):
+    """Set random seed to all random library used in the project.
+    This function set the random seed for Python standard library, NumPy, and PyTorch
+
+    Args:
+        seed (int, optional): The random seed to set.
+    """
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+
+
 def get_all_file_with_ext(path: str, ext: str) -> Generator[str, None, None]:
     """Recurse all files within a directory.
 
@@ -33,6 +47,8 @@ def get_all_file_with_ext(path: str, ext: str) -> Generator[str, None, None]:
     Yields:
         str: The absolute path to the file with the extension.
     """
+    if ext.startswith('.'):
+        ext = '.' + ext
     for root, _, files in os.walk(path):
         for file in files:
             if file.endswith(ext):

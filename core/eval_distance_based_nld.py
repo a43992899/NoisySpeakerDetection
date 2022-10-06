@@ -12,9 +12,9 @@ from tqdm import tqdm
 from utils import fit_bmm
 
 from utils import get_all_file_with_ext, isTarget, write_to_csv
-from hparam import Hparam
+from core.config import Hparam
 from data_load import SpeakerDatasetPreprocessed
-from speech_embedder_net import SpeechEmbedder, SpeechEmbedder_Softmax, \
+from core.loss import SpeechEmbedder, SpeechEmbedder_Softmax, \
     GE2ELoss_, AAMSoftmax, SubcenterArcMarginProduct, get_cossim
 
 

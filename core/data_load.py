@@ -14,9 +14,11 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset
 
+from core.config import Config
+from core.utils import set_random_seed_to
 
-random.seed(1)
-np.random.seed(1)
+
+set_random_seed_to(1)
 
 
 # TODO: unused function?
@@ -28,7 +30,7 @@ def relabel(selected_file, utter_index, mislabel_dict):
 
 class SpeakerDatasetPreprocessed(Dataset):
 
-    def __init__(self, hp):
+    def __init__(self, hp: Config):
         self.vox1_path = hp.data.vox1_path
         self.stage = hp.stage
         if self.stage == "train":
