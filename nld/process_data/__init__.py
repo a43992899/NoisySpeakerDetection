@@ -45,14 +45,14 @@ def produce_mel_spectrogram(args):
                     assert intervals.ndim == 2
                     assert intervals.shape[1] == 2
                     for i in range(intervals.shape[0]):
-                        if (start_index := intervals[i, 0]) - (end_index := intervals[i, 1]) <= utterance_min_length:
+                        if (start_index := intervals[i, 1]) - (end_index := intervals[i, 0]) <= utterance_min_length:
                             continue
                         utter_part = utterance[start_index:end_index]
                         spectrogram = librosa.core.stft(
                             utter_part,
                             n_fft=cfg.nfft,
                             win_length=int(cfg.window * cfg.sr),
-                            hop_length=int(cfg.hop * np.sr)
+                            hop_length=int(cfg.hop * cfg.sr)
                         )
                         spectrogram = np.abs(spectrogram) ** 2
                         spectrogram = np.log10(np.dot(mel_basis, spectrogram) + 1e-6)
