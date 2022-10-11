@@ -48,6 +48,7 @@ def produce_mel_spectrogram(args):
                         if (start_index := intervals[i, 1]) - (end_index := intervals[i, 0]) <= utterance_min_length:
                             continue
                         utter_part = utterance[start_index:end_index]
+                        # FIXME: why spectrogram is full of zeros?
                         spectrogram = librosa.core.stft(
                             utter_part,
                             n_fft=cfg.nfft,
