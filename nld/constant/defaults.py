@@ -1,7 +1,5 @@
 from pathlib import Path
 
-from .config import DataConfig
-
 DEFAULT_DATA_DIR = Path('./data')
 
 DEFAULT_VOXCELEB_DATASET_DIR = DEFAULT_DATA_DIR / 'voxceleb'

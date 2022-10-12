@@ -6,6 +6,7 @@ from typing import Dict
 import librosa
 import numpy as np
 import numpy.typing as npt
+from tqdm import tqdm
 
 from ..constant.config import DataConfig, NOISE_LEVELS, NOISE_TYPES
 from ..utils import set_random_seed_to
@@ -30,9 +31,13 @@ def produce_mel_spectrogram(args):
         (vox1_audio_dir, vox1test_audio_dir, vox2_audio_dir),
         (vox1_output_dir, vox1test_output_dir, vox2_output_dir)
     ):
-        print(f'Processing data from {dataset_dir} to {output_dir}...')
         speaker_to_id: Dict[str, int] = dict()
-        for speaker_id, speaker in enumerate(dataset_dir.iterdir()):
+        speaker_list = sorted(dataset_dir.iterdir())
+        for speaker_id, speaker in tqdm(
+            enumerate(speaker_list),
+            total=len(speaker_list),
+            desc=f'Processing data from {dataset_dir} to {output_dir}...'
+        ):
             if not speaker.is_dir():
                 continue
             speaker_to_id[speaker.name] = speaker_id

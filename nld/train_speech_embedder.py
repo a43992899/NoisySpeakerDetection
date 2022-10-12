@@ -1,3 +1,4 @@
+import gc
 import os
 import random
 import shutil
@@ -136,10 +137,9 @@ def train(hp: Config, cfg: str, enable_wandb: bool):
     # Record training iteration
     iteration = 0
 
-    ############################
-    #      Start training!     #
-    ############################
-
+    gc.collect()
+    if enable_wandb:
+        wandb.watch(embedder_net, criterion)
     for epoch in range(restored_epoch, hp.train.epochs):
         total_loss = 0
         for batch_id, (mel_db_batch, labels, is_noisy,
