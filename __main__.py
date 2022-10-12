@@ -9,7 +9,7 @@ from nld.constant.defaults import (DEFAULT_VOX1_AUDIO_DIR,
                                    DEFAULT_VOX2_OUTPUT_DIR,
                                    DEFAULT_VOXCELEB_MISLABELED_JSON_DIR)
 from nld.process_data import produce_mel_spectrogram, produce_noisy_label
-# from nld.train_speech_embedder import main as train_main
+from nld.train_speech_embedder import main as train_main
 
 if __name__ != '__main__':
     raise RuntimeError()
@@ -40,10 +40,12 @@ produce_noisy_label_parser.add_argument('--mislabeled-json-dir', type=Path,
                                         default=DEFAULT_VOXCELEB_MISLABELED_JSON_DIR)
 produce_noisy_label_parser.add_argument('--vox1-output-dir', type=Path, default=DEFAULT_VOX1_OUTPUT_DIR)
 produce_noisy_label_parser.add_argument('--vox2-output-dir', type=Path, default=DEFAULT_VOX2_OUTPUT_DIR)
+produce_noisy_label_parser.add_argument('--random-seed', type=int, default=1)
 
 
-# train_parser = main_subparser.add_parser('train')
-# train_parser.set_defaults(main_func=train_main)
+train_parser = main_subparser.add_parser('train')
+train_parser.set_defaults(main_func=train_main)
+train_parser.add_argument('--enable-wandb', default=False, type=bool)
 # train_parser.add_argument('--cfg', type=str, default='config/config.yaml', help='config.yaml path')
 # train_parser.add_argument('--csv', type=str, default='../data/test_results.csv', help='csv path for writing test results')
 

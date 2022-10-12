@@ -5,29 +5,33 @@ import time
 
 import numpy as np
 import torch
+import wandb
 from torch.cuda.amp import GradScaler as GradScaler
 from torch.cuda.amp import autocast as autocast
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 
-from nld.process_data.dataset import SpeakerDatasetPreprocessed
-from utils import (compute_eer, get_all_file_with_ext, isTarget,
-                   set_random_seed_to, write_to_csv)
-
 from .constant.config import Config, Hparam
-from .model.loss import (AAMSoftmax, GE2ELoss_, SpeechEmbedder,
-                         SpeechEmbedder_Softmax, SubcenterArcMarginProduct,
+from .constant.entities import WANDB_ENTITY, WANDB_PROJECT
+from .model.loss import (AAMSoftmax, GE2ELoss_, SubcenterArcMarginProduct,
                          get_centroids)
+from .model.model import SpeechEmbedder
+from .process_data.dataset import SpeakerDatasetPreprocessed
+from .utils import (compute_eer, get_all_file_with_ext, isTarget,
+                    set_random_seed_to, write_to_csv)
 
 
-def train(hp: Config, cfg: str):
-    model_path = hp.train.model_path
-    loss_type = hp.train.loss
-    if noise_type := hp.train.noise_type not in ['Permute', 'Open', 'Mix']:
+def train(hp: Config, cfg: str, enable_wandb: bool):
+    if enable_wandb:
+        wandb.init(project=WANDB_PROJECT, entity=WANDB_ENTITY)
+
+    if (noise_type := hp.train.noise_type) not in ['Permute', 'Open', 'Mix']:
         raise NotImplementedError(f'Unsupported noise type {noise_type}')
-    assert hp.train.noise_type \
-        in ['Permute', 'Open', 'Mix'], 'Unknown noise type'
+    assert hp.train.noise_type in ['Permute', 'Open', 'Mix'], 'Unknown noise type'
+
+    # Obtain checkpoint saving directory
+    loss_type = hp.train.loss
     if loss_type == 'CE':
         loss_type = "Softmax"
         sub_folder = f"bs{hp.train.N}"
@@ -71,12 +75,8 @@ def train(hp: Config, cfg: str):
         drop_last=True,
         pin_memory=True)
 
-    # Get neural network training components
-    if hp.train.loss == 'CE':
-        embedder_net = SpeechEmbedder_Softmax(
-            hp=hp, num_classes=5994).to(device)
-    else:
-        embedder_net = SpeechEmbedder(hp).to(device)
+    # Get training model
+    embedder_net = SpeechEmbedder(hp, should_softmax=hp.train.loss == 'CE', num_classes=5994).to(device)
 
     if hp.train.loss == 'CE':
         criterion = torch.nn.NLLLoss()
@@ -117,6 +117,7 @@ def train(hp: Config, cfg: str):
     scaler = GradScaler()
 
     # If we are about to resume the progress of a previous training
+    model_path = hp.train.model_path
     if hp.train.restore:
         embedder_net.load_state_dict(torch.load(model_path))
         try:

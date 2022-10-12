@@ -1,10 +1,16 @@
-from argparse import ArgumentParser
-from dataclasses import asdict, dataclass
 import json
+from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Literal, Union
+from typing import Literal, Optional, Tuple, Union, get_args
 
 import yaml
+
+NoiseLevel = Literal[0, 20, 50, 75]
+NoiseType = Literal['Permute', 'Open', 'Mix']
+LossType = Literal['CE', 'GE2E', 'AAM', 'AAMSC']
+
+NOISE_LEVELS: Tuple[NoiseLevel] = get_args(NoiseLevel)
+NOISE_TYPES: Tuple[NoiseType] = get_args(NoiseType)
 
 
 @dataclass
@@ -21,9 +27,23 @@ class BaseConfig:
         with open(json_file, 'r') as f:
             return cls(**json.load(f))
 
-    @staticmethod
-    def get_argparse_argument_from(target: str):
-        return '--' + target.replace('_', '-')
+
+@dataclass
+class NewlyProposedConfig(BaseConfig):
+    noise_type: NoiseType
+    noise_level: NoiseLevel
+
+    loss: LossType
+
+    restore: bool
+    checkpoint_dir: Optional[str]
+    model_path: Optional[str]
+
+    learning_rate: float = 1e-4
+
+    hidden: int = 768
+    num_layer: int = 3
+    proj: int = 256
 
 
 @dataclass
@@ -38,17 +58,17 @@ class DataConfig(BaseConfig):
 
 
 @dataclass
-class ModelConfig:
+class ModelConfig(BaseConfig):
     hidden: int
     num_layer: int
     proj: int
 
 
 @dataclass
-class TrainConfig:
+class TrainConfig(BaseConfig):
     debug: bool
     restore: bool
-    noise_type: Literal['Permute', 'Open', 'Mix']
+    noise_type: NoiseType
     noise_level: Literal[0, 20, 50, 75]
     N: int
     M: int
@@ -67,7 +87,7 @@ class TrainConfig:
 
 
 @dataclass
-class TestConfig:
+class TestConfig(BaseConfig):
     N: int
     M: int
     num_workers: int
@@ -76,7 +96,7 @@ class TestConfig:
 
 
 @dataclass
-class NLDConfig:
+class NLDConfig(BaseConfig):
     noise_type: Literal['Permute', 'Open', 'Mix']
     noise_level: Literal[0, 20, 50, 75]
     model_path: str
@@ -86,7 +106,7 @@ class NLDConfig:
 
 
 @dataclass
-class Config:
+class Config(BaseConfig):
     stage: Literal['train', 'test', 'nld']
     device: Literal['cpu', 'cuda']
     data: DataConfig

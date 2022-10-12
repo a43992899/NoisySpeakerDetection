@@ -11,17 +11,17 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from .constant.config import Hparam
-from .process_data.dataset import SpeakerDatasetPreprocessed
+from .model.beta_mixture import fit_bmm
 from .model.loss import (AAMSoftmax, GE2ELoss_, SpeechEmbedder,
                          SpeechEmbedder_Softmax, SubcenterArcMarginProduct,
                          get_cossim)
-from .utils import fit_bmm, get_all_file_with_ext, isTarget, write_to_csv
+from .process_data.dataset import SpeakerDatasetPreprocessed
+from .utils import (get_all_file_with_ext, isTarget, set_random_seed_to,
+                    write_to_csv)
 
 os.chdir(os.path.dirname(os.path.abspath(__file__)))  # change to current file path
 
-random.seed(1)
-np.random.seed(1)
-torch.manual_seed(1)
+set_random_seed_to(1)
 # print("current dir: ", os.getcwd())
 hp = Hparam(file='config/config.yaml')
 hp.stage = 'nld'
@@ -73,9 +73,6 @@ def get_criterion(device, model_path):
 
 
 device = torch.device(hp.device)
-random.seed(1)
-torch.manual_seed(1)
-torch.cuda.manual_seed_all(1)
 
 
 def eval_one(model_path, stop_batch_id=500, skip_plot=False):

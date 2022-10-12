@@ -7,8 +7,7 @@ import librosa
 import numpy as np
 import numpy.typing as npt
 
-from ..constant.config import DataConfig
-from ..constant.types import NOISE_LEVELS, NOISE_TYPES
+from ..constant.config import DataConfig, NOISE_LEVELS, NOISE_TYPES
 from ..utils import set_random_seed_to
 
 
@@ -20,6 +19,10 @@ def produce_mel_spectrogram(args):
     vox1test_output_dir: Path = args.vox1test_output_dir
     vox2_output_dir: Path = args.vox2_output_dir
     cfg = DataConfig(args.sr, args.nfft, args.window, args.hop, args.nmels, args.tisv_frame, args.silence_threshold)
+
+    vox1_output_dir.mkdir(parents=True, exist_ok=True)
+    vox1test_output_dir.mkdir(parents=True, exist_ok=True)
+    vox2_output_dir.mkdir(parents=True, exist_ok=True)
 
     utterance_min_length = (cfg.tisv_frame * cfg.hop + cfg.window) * cfg.sr
     mel_basis = librosa.filters.mel(sr=cfg.sr, n_fft=cfg.nfft, n_mels=cfg.nmels)
@@ -40,15 +43,14 @@ def produce_mel_spectrogram(args):
                 for audio in video.iterdir():
                     if not audio.is_file():
                         continue
-                    utterance, _ = librosa.core.load(audio, cfg.sr)
+                    utterance, _ = librosa.core.load(audio, sr=cfg.sr)
                     intervals: npt.NDArray[np.int32] = librosa.effects.split(utterance, top_db=cfg.silence_threshold)
                     assert intervals.ndim == 2
                     assert intervals.shape[1] == 2
                     for i in range(intervals.shape[0]):
-                        if (start_index := intervals[i, 1]) - (end_index := intervals[i, 0]) <= utterance_min_length:
+                        if (end_index := intervals[i, 1]) - (start_index := intervals[i, 0]) <= utterance_min_length:
                             continue
                         utter_part = utterance[start_index:end_index]
-                        # FIXME: why spectrogram is full of zeros?
                         spectrogram = librosa.core.stft(
                             utter_part,
                             n_fft=cfg.nfft,
@@ -72,7 +74,7 @@ def produce_mel_spectrogram(args):
 
 
 def produce_noisy_label(args):
-    set_random_seed_to(1)
+    set_random_seed_to(args.random_seed)
     mislabeled_json_dir: Path = args.mislabeled_json_dir
     vox1_output_dir: Path = args.vox1_output_dir
     vox2_output_dir: Path = args.vox2_output_dir
@@ -89,17 +91,19 @@ def produce_noisy_label(args):
         for noise_type in NOISE_TYPES:
             print(f'Processing {noise_level = } and {noise_type = }')
             mislabeled_dict: Dict[str, str] = dict()
-            for vox2_mel_spectrogram_file in vox2_mel_spectrogram_files:
-                if random.random() <= noise_level / 100:
-                    if noise_type == 'permute':
-                        mislabeled_dict[vox2_mel_spectrogram_file.stem] = random.choice(vox2_speaker_ids)
-                    elif noise_type == 'open':
-                        mislabeled_dict[vox2_mel_spectrogram_file.stem] = random.choice(vox1_speaker_ids)
-                    else:
-                        assert noise_type == 'mix'
-                        mislabeled_dict[vox2_mel_spectrogram_file.stem] = (
-                            random.choice(vox1_speaker_ids) if random.random() <= 0.5
-                            else random.choice(vox2_speaker_ids)
-                        )
-            with open(mislabeled_json_dir / noise_type / f'voxceleb2_{noise_level}_mislabeled.json', 'w') as f:
+
+            if noise_level != 0:
+                for vox2_mel_spectrogram_file in vox2_mel_spectrogram_files:
+                    if random.random() <= noise_level / 100:
+                        if noise_type == 'Permute':
+                            mislabeled_dict[vox2_mel_spectrogram_file.stem] = random.choice(vox2_speaker_ids)
+                        elif noise_type == 'Open':
+                            mislabeled_dict[vox2_mel_spectrogram_file.stem] = random.choice(vox1_speaker_ids)
+                        else:
+                            assert noise_type == 'Mix'
+                            mislabeled_dict[vox2_mel_spectrogram_file.stem] = \
+                                (random.choice(vox1_speaker_ids) if random.random() <= 0.5
+                                 else random.choice(vox2_speaker_ids))
+
+            with open(mislabeled_json_dir / noise_type / f'{noise_level}%.json', 'w') as f:
                 json.dump(mislabeled_dict, f)
