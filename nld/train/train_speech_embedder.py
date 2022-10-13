@@ -53,33 +53,29 @@ def train(
 
     # TODO: check loss related hyperparameters and create loss function
     if cfg.loss == 'CE':
-        criterion = torch.nn.NLLLoss().to(device)
+        criterion = torch.nn.NLLLoss()
     elif cfg.loss == 'GE2E':
-        criterion = GE2ELoss_(loss_method='softmax').to(device)
+        criterion = GE2ELoss_(loss_method='softmax')
     elif cfg.loss == 'AAM':
         criterion = AAMSoftmax(
-            cfg.model_projection_size,
-            utterance_classes_num,
-            scale=cfg.s,
-            margin=cfg.m,
-            easy_margin=True).to(device)
+            cfg.model_projection_size, utterance_classes_num,
+            scale=cfg.s, margin=cfg.m, easy_margin=True
+        )
     elif cfg.loss == 'AAMSC':
         criterion = SubcenterArcMarginProduct(
-            cfg.model_projection_size,
-            utterance_classes_num,
-            s=cfg.s,
-            m=cfg.m,
-            K=cfg.K,
-        ).to(device)
+            cfg.model_projection_size, utterance_classes_num,
+            s=cfg.s, m=cfg.m, K=cfg.K
+        )
     else:
         raise NotImplementedError('Unknown loss')
+    criterion.to(device)
 
     train_dataset = SpeakerDataset(utterance_dir, mislabeled_json_file)
     train_data_loader = DataLoader(
         train_dataset,
-        batch_size=cfg.N
+        batch_size=cfg.N,
         shuffle=True,
-        num_workers=new_cfg.dataloader_num_workers,
+        num_workers=cfg.dataloader_num_workers,
         drop_last=True,
         pin_memory=True,
     )
@@ -119,7 +115,8 @@ def train(
             raise ValueError()
 
     gc.collect()
-    empty_cuda_cache()
+    if cuda_is_available():
+        empty_cuda_cache()
 
     if enable_wandb:
         wandb.watch(embedder_net, criterion)
