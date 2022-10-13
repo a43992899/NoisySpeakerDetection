@@ -12,6 +12,8 @@ OptimizerType = Literal['Adam']
 
 NOISE_LEVELS: Tuple[NoiseLevel] = get_args(NoiseLevel)
 NOISE_TYPES: Tuple[NoiseType] = get_args(NoiseType)
+LOSSES: Tuple[LossType] = get_args(LossType)
+OPTIMIZERS: Tuple[OptimizerType] = get_args(OptimizerType)
 
 
 @dataclass
@@ -31,34 +33,28 @@ class BaseConfig:
 
 @dataclass
 class NewTrainConfig(BaseConfig):
-    noise_type: NoiseType
+    restore_from: str
+
     noise_level: NoiseLevel
+    noise_type: NoiseType
+    loss: LossType
 
     N: int
     M: int
     s: int
     m: float
-    K: int
-
-    loss: LossType
-    optimizer: OptimizerType
-    learning_rate: float
+    k: int
 
     epochs: int
-    log_interval: int
-    checkpoint_interval: int
-
-    checkpoint_dir: Optional[str]
-    model_path: Optional[str]
-
-    restore_from: str
-    restore_epoch: int
-
-    dataloader_num_workers: int
+    optimizer: OptimizerType
+    learning_rate: float
 
     model_lstm_hidden_size: int
     model_lstm_num_layers: int
     model_projection_size: int
+
+    dataloader_num_workers: int
+    random_seed: int
 
 
 @dataclass
