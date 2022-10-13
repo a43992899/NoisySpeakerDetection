@@ -1,24 +1,19 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Created on Mon Aug  6 20:55:52 2018
-
-@author: harry
-"""
 import json
 import os
 import random
-from tqdm import tqdm
+from pathlib import Path
+from typing import Dict, List, Optional
 
 import numpy as np
 import torch
 from torch.utils.data import Dataset
+from tqdm import tqdm
 
-from ..constant.config import Config
+from ..constant.config import Config, DataConfig
 from ..utils import set_random_seed_to
 
-
-set_random_seed_to(1)
+# TODO set random seed at a global level? Might not be a good idea...
+# set_random_seed_to(1)
 
 
 # TODO: unused function?
@@ -28,8 +23,58 @@ def relabel(selected_file, utter_index, mislabel_dict):
         return mislabel_dict[key]
 
 
-class SpeakerDatasetPreprocessed(Dataset):
+class SpeakerDataset(Dataset):
+    utterance_files: List[Path]
+    spkr2id: Dict[str, int]
+    data_processing_config: DataConfig
+    mislabeled_mapping: Optional[Dict[str, str]]
 
+    def __init__(self, utterance_dir: Path, mislabeled_json_file: Optional[Path]) -> None:
+        super().__init__()
+        if not utterance_dir.exists():
+            raise FileNotFoundError()
+        if not utterance_dir.is_dir():
+            raise NotADirectoryError()
+
+        spkr2id_file = utterance_dir / 'spkr2id.json'
+        if not spkr2id_file.exists():
+            raise FileNotFoundError()
+        if not spkr2id_file.is_file():
+            raise IsADirectoryError()
+
+        processing_config = utterance_dir / 'data-processing-config.json'
+        if not processing_config.exists():
+            raise FileNotFoundError()
+        if not processing_config.is_file():
+            raise IsADirectoryError()
+
+        if mislabeled_json_file is not None:
+            if not mislabeled_json_file.exists():
+                raise FileNotFoundError()
+            if not mislabeled_json_file.is_file():
+                raise IsADirectoryError()
+
+        self.utterance_files = list()
+        for f in sorted(utterance_dir.iterdir()):
+            if f.suffix == '.npy':
+                self.utterance_files.append(f)
+        with open(spkr2id_file, 'r') as f:
+            self.spkr2id_file = json.load(f)
+        with open(mislabeled_json_file, 'r') as f:
+            self.data_processing_config = DataConfig(**json.load(f))
+        if mislabeled_json_file is not None:
+            with open(mislabeled_json_file):
+                self.mislabeled_mapping = json.load(f)
+
+    def __len__(self):
+        return len(self.utterance_files)
+
+    def __getitem__(self, idx: int):
+        # TODO: how to get items?
+        selected_utterance = self.utterance_files[idx]
+
+
+class SpeakerDatasetPreprocessed(Dataset):
     def __init__(self, hp: Config):
         self.vox1_path = hp.data.vox1_path
         self.stage = hp.stage

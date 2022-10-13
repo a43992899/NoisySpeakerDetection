@@ -13,14 +13,14 @@ from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 
-from .constant.config import Config, Hparam
-from .constant.entities import WANDB_ENTITY, WANDB_PROJECT
-from .model.loss import (AAMSoftmax, GE2ELoss_, SubcenterArcMarginProduct,
-                         get_centroids)
-from .model.model import SpeechEmbedder
-from .process_data.dataset import SpeakerDatasetPreprocessed
-from .utils import (compute_eer, get_all_file_with_ext, isTarget,
-                    set_random_seed_to, write_to_csv)
+from ..constant.config import Config, Hparam
+from ..constant.entities import WANDB_ENTITY, WANDB_PROJECT
+from ..model.loss import (AAMSoftmax, GE2ELoss_, SubcenterArcMarginProduct,
+                          get_centroids)
+from ..model.model import SpeechEmbedder
+from ..process_data.dataset import SpeakerDatasetPreprocessed
+from ..utils import (compute_eer, get_all_file_with_ext, isTarget,
+                     set_random_seed_to, write_to_csv)
 
 
 def train(hp: Config, cfg: str, enable_wandb: bool):

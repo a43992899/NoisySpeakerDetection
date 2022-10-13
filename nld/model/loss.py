@@ -1,11 +1,3 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Created on Wed Sep  5 20:58:34 2018
-
-@author: harry
-"""
-
 import math
 
 import numpy as np
@@ -13,7 +5,7 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
 
-from utils import accuracy, calc_loss, get_cossim
+from ..utils import accuracy, calc_loss, get_cossim
 
 
 # TODO: this class is already deprecated

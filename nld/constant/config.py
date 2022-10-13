@@ -8,6 +8,7 @@ import yaml
 NoiseLevel = Literal[0, 20, 50, 75]
 NoiseType = Literal['Permute', 'Open', 'Mix']
 LossType = Literal['CE', 'GE2E', 'AAM', 'AAMSC']
+OptimizerType = Literal['Adam']
 
 NOISE_LEVELS: Tuple[NoiseLevel] = get_args(NoiseLevel)
 NOISE_TYPES: Tuple[NoiseType] = get_args(NoiseType)
@@ -29,32 +30,46 @@ class BaseConfig:
 
 
 @dataclass
-class NewlyProposedConfig(BaseConfig):
+class NewTrainConfig(BaseConfig):
     noise_type: NoiseType
     noise_level: NoiseLevel
 
-    loss: LossType
+    N: int
+    M: int
+    s: int
+    m: float
+    K: int
 
-    restore: bool
+    loss: LossType
+    optimizer: OptimizerType
+    learning_rate: float
+
+    epochs: int
+    log_interval: int
+    checkpoint_interval: int
+
     checkpoint_dir: Optional[str]
     model_path: Optional[str]
 
-    learning_rate: float = 1e-4
+    restore_from: str
+    restore_epoch: int
 
-    hidden: int = 768
-    num_layer: int = 3
-    proj: int = 256
+    dataloader_num_workers: int
+
+    model_lstm_hidden_size: int
+    model_lstm_num_layers: int
+    model_projection_size: int
 
 
 @dataclass
 class DataConfig(BaseConfig):
-    sr: int = 16000
-    nfft: int = 512
-    window: float = 0.025
-    hop: float = 0.01
-    nmels: int = 40
-    tisv_frame: int = 180
-    silence_threshold: float = 30
+    sr: int
+    nfft: int
+    window: float
+    hop: float
+    nmels: int
+    tisv_frame: int
+    silence_threshold: float
 
 
 @dataclass
