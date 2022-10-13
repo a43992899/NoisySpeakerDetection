@@ -4,8 +4,6 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
 
-from ..constant.config import Config
-
 
 class SpeechEmbedder(nn.Module):
     lstm: nn.LSTM
@@ -15,13 +13,11 @@ class SpeechEmbedder(nn.Module):
     bn1: Optional[nn.BatchNorm1d]
     softmax: Optional[nn.LogSoftmax]
 
-    # TODO: extract hp to separa
-    def __init__(self, hp: Config,
-                 lstm_input_size: int,
-                 lstm_hidden_size: int, lstm_num_layers: int, projection_size: int,
-                 should_softmax: bool = False, num_classes: Optional[int] = None):
+    def __init__(
+        self, lstm_input_size: int, lstm_hidden_size: int, lstm_num_layers: int, projection_size: int,
+        should_softmax: bool = False, num_classes: Optional[int] = None
+    ):
         super().__init__()
-        # self.lstm = nn.LSTM(hp.data.nmels, hp.model.hidden, num_layers=hp.model.num_layer, batch_first=True)
         self.lstm = nn.LSTM(lstm_input_size, lstm_hidden_size, num_layers=lstm_num_layers, batch_first=True)
 
         for name, param in self.lstm.named_parameters():
@@ -30,15 +26,12 @@ class SpeechEmbedder(nn.Module):
             elif 'weight' in name:
                 nn.init.xavier_normal_(param)
 
-        # self.projection = nn.Linear(hp.model.hidden, hp.model.proj)
         self.projection = nn.Linear(lstm_hidden_size, projection_size)
 
-        # The following components are required for cross-entropy loss
         self.should_softmax = should_softmax
         if should_softmax:
             if num_classes is None:
                 raise ValueError()
-            # self.projection2 = nn.Linear(hp.model.proj, num_classes)
             self.projection2 = nn.Linear(projection_size, num_classes)
             self.bn1 = nn.BatchNorm1d(num_classes)
             self.softmax = nn.LogSoftmax(dim=1)

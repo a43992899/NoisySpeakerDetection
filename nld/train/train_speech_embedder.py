@@ -1,162 +1,145 @@
 import gc
+import json
 import os
 import random
-import shutil
-import time
+from pathlib import Path
+from typing import Dict
 
 import numpy as np
 import torch
 import wandb
-from torch.cuda.amp import GradScaler as GradScaler
-from torch.cuda.amp import autocast as autocast
+from torch.cuda import empty_cache as empty_cuda_cache
+from torch.cuda import is_available as cuda_is_available
+from torch.cuda.amp import GradScaler, autocast
 from torch.utils.data import DataLoader
-from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 
-from ..constant.config import Config, Hparam
+from ..constant.config import Config, NewTrainConfig
 from ..constant.entities import WANDB_ENTITY, WANDB_PROJECT
 from ..model.loss import (AAMSoftmax, GE2ELoss_, SubcenterArcMarginProduct,
                           get_centroids)
 from ..model.model import SpeechEmbedder
-from ..process_data.dataset import SpeakerDatasetPreprocessed
-from ..utils import (compute_eer, get_all_file_with_ext, isTarget,
-                     set_random_seed_to, write_to_csv)
+from ..process_data.dataset import SpeakerDataset, SpeakerDatasetPreprocessed
+from ..utils import (compute_eer, current_utc_time, get_all_file_with_ext,
+                     isTarget, set_random_seed_to, write_to_csv)
 
 
-def train(hp: Config, cfg: str, enable_wandb: bool):
+def train(
+    cfg: NewTrainConfig, mislabeled_json_file: Path, utterance_dir: Path,
+    training_model_save_dir: Path, enable_wandb: bool
+):
+    set_random_seed_to(cfg.random_seed)
+    job_name = current_utc_time()
+    device = torch.device('cuda' if cuda_is_available() else 'cpu')
+
     if enable_wandb:
-        wandb.init(project=WANDB_PROJECT, entity=WANDB_ENTITY)
+        wandb.init(
+            project=WANDB_PROJECT,
+            entity=WANDB_ENTITY,
+            config=cfg.to_dict(),
+            name=job_name
+        )
 
-    if (noise_type := hp.train.noise_type) not in ['Permute', 'Open', 'Mix']:
-        raise NotImplementedError(f'Unsupported noise type {noise_type}')
-    assert hp.train.noise_type in ['Permute', 'Open', 'Mix'], 'Unknown noise type'
+    model_dir = training_model_save_dir / job_name
+    print(f'Checkpoint saving dir: {model_dir}')
+    model_dir.mkdir()
+    cfg.to_json(model_dir / 'config.json')
 
-    # Obtain checkpoint saving directory
-    loss_type = hp.train.loss
-    if loss_type == 'CE':
-        loss_type = "Softmax"
-        sub_folder = f"bs{hp.train.N}"
-    elif loss_type == 'GE2E':
-        bs = hp.train.M * hp.train.N
-        sub_folder = f"m{hp.train.M}_bs{bs}"
-    elif loss_type == 'AAM':
-        sub_folder = f"m{hp.train.m}_s{hp.train.s}_bs{hp.train.N}"
-    elif loss_type == 'AAMSC':
-        sub_folder = f"m{hp.train.m}_s{hp.train.s}_k{hp.train.K}_bs{hp.train.N}"
-    else:
-        raise ValueError('Unknown loss')
-    hp.train.checkpoint_dir = os.path.join(
-        hp.train.checkpoint_dir,
-        f"{hp.train.noise_type}",
-        loss_type,
-        f"{hp.train.noise_level}%",
-        sub_folder)
-    print('Will save checkpoints to:', hp.train.checkpoint_dir)
+    spkr2id_file = utterance_dir / 'spkr2id.json'
+    with open(spkr2id_file, 'r') as f:
+        spkr2id: Dict[str, int] = json.load(f)
+    utterance_classes_num = len(spkr2id)  # TODO: assert this to be 5994!!!
+    embedder_net = SpeechEmbedder(should_softmax=(cfg.loss == 'CE'), num_classes=utterance_classes_num).to(device)
 
-    # Writing training log
-    if not hp.train.debug:
-        os.makedirs(hp.train.checkpoint_dir, exist_ok=True)
-        log_dir = os.path.join(hp.train.checkpoint_dir, 'log')
-        writer = SummaryWriter(log_dir)
-        try:
-            shutil.copy(cfg, log_dir)
-        except shutil.SameFileError:
-            print('Config file already exists in log directory, skip copying')
-
-    # Get the training device
-    device = torch.device(hp.device)
-
-    # Get the training dataset and data loader
-    train_dataset = SpeakerDatasetPreprocessed(hp)
-    train_data_loader = DataLoader(
-        train_dataset,
-        batch_size=hp.train.N,
-        shuffle=True,
-        num_workers=hp.train.num_workers,
-        drop_last=True,
-        pin_memory=True)
-
-    # Get training model
-    embedder_net = SpeechEmbedder(hp, should_softmax=hp.train.loss == 'CE', num_classes=5994).to(device)
-
-    if hp.train.loss == 'CE':
-        criterion = torch.nn.NLLLoss()
-    elif hp.train.loss == 'GE2E':
-        criterion = GE2ELoss_(
-            init_w=10.0,
-            init_b=-5.0,
-            loss_method='softmax').to(device)
-    elif hp.train.loss == 'AAM':
+    # TODO: check loss related hyperparameters and create loss function
+    if cfg.loss == 'CE':
+        criterion = torch.nn.NLLLoss().to(device)
+    elif cfg.loss == 'GE2E':
+        criterion = GE2ELoss_(loss_method='softmax').to(device)
+    elif cfg.loss == 'AAM':
         criterion = AAMSoftmax(
-            hp.model.proj,
-            5994,
-            scale=hp.train.s,
-            margin=hp.train.m,
+            cfg.model_projection_size,
+            utterance_classes_num,
+            scale=cfg.s,
+            margin=cfg.m,
             easy_margin=True).to(device)
-    elif hp.train.loss == 'AAMSC':
+    elif cfg.loss == 'AAMSC':
         criterion = SubcenterArcMarginProduct(
-            hp.model.proj,
-            5994,
-            s=hp.train.s,
-            m=hp.train.m,
-            K=hp.train.K).to(device)
+            cfg.model_projection_size,
+            utterance_classes_num,
+            s=cfg.s,
+            m=cfg.m,
+            K=cfg.K,
+        ).to(device)
     else:
         raise NotImplementedError('Unknown loss')
 
-    if hp.train.optimizer == 'Adam':
+    train_dataset = SpeakerDataset(utterance_dir, mislabeled_json_file)
+    train_data_loader = DataLoader(
+        train_dataset,
+        batch_size=cfg.N
+        shuffle=True,
+        num_workers=new_cfg.dataloader_num_workers,
+        drop_last=True,
+        pin_memory=True,
+    )
+
+    if cfg.optimizer == 'Adam':
         optimizer = torch.optim.Adam([
             {'params': embedder_net.parameters()},
             {'params': criterion.parameters()}
-        ], lr=hp.train.lr)
-    elif hp.train.optimizer == 'SGD':
-        optimizer = torch.optim.SGD([
-            {'params': embedder_net.parameters()},
-            {'params': criterion.parameters()}
-        ], lr=hp.train.lr, momentum=0.9, weight_decay=5e-4)
+        ], lr=cfg.learning_rate)
     else:
-        raise NotImplementedError(f'Unsupported module optimizer {hp.train.optimizer}.')
+        raise ValueError(f'Unsupported module optimizer {cfg.optimizer}.')
+
     scaler = GradScaler()
 
-    # If we are about to resume the progress of a previous training
-    model_path = hp.train.model_path
-    if hp.train.restore:
-        embedder_net.load_state_dict(torch.load(model_path))
-        try:
-            criterion.load_state_dict(
-                torch.load(model_path.replace('ckpt_epoch', 'ckpt_criterion_epoch')))
-            # criterion.m = hp.train.m
-            print('Loaded criterion')
-        except BaseException:
-            ...
-        restored_epoch = int(model_path.split('/')[-1].split('_')[-1].split('.')[0])
-    else:
-        restored_epoch = 0
+    if (restore_model := cfg.restore_model_from) and (restore_loss := cfg.restore_loss_from):
+        restore_model = Path(restore_model)
+        if not restore_model.exists():
+            raise FileNotFoundError()
+        if not restore_model.is_file():
+            raise IsADirectoryError()
+        if not restore_model.suffix == '.pth':
+            raise ValueError()
 
-    embedder_net.train()
+        restore_loss = Path(restore_loss)
+        if not restore_loss.exists():
+            raise FileNotFoundError()
+        if not restore_loss.is_file():
+            raise IsADirectoryError()
+        if not restore_loss.suffix == '.pth':
+            raise ValueError()
 
-    # Record training iteration
-    iteration = 0
+        missing_keys, unexpected_keys = embedder_net.load_state_dict(torch.load(restore_model))
+        if len(missing_keys) != 0 or len(unexpected_keys) != 0:
+            raise ValueError()
+        missing_keys, unexpected_keys = criterion.load_state_dict(torch.load(restore_loss))
+        if len(missing_keys) != 0 or len(unexpected_keys) != 0:
+            raise ValueError()
 
     gc.collect()
+    empty_cuda_cache()
+
     if enable_wandb:
         wandb.watch(embedder_net, criterion)
-    for epoch in range(restored_epoch, hp.train.epochs):
+
+    embedder_net.train()
+    # for epoch in range(restored_epoch, hp.train.epochs):
+    for epoch in range(cfg.epoches):
         total_loss = 0
-        for batch_id, (mel_db_batch, labels, is_noisy,
-                       utterance_ids) in enumerate(train_data_loader):
+        for batch_id, (mel_db_batch, labels, is_noisy, utterance_ids) in enumerate(train_data_loader):
             utterance_ids = np.array(utterance_ids).T
             mel_db_batch = mel_db_batch.to(device, non_blocking=True)
             labels = labels.to(device, non_blocking=True)
 
             mel_db_batch = torch.reshape(
                 mel_db_batch,
-                (hp.train.N * hp.train.M,
-                 mel_db_batch.size(2),
-                 mel_db_batch.size(3)))
-            labels = labels.reshape(hp.train.N * hp.train.M)
+                (cfg.N * cfg.M, mel_db_batch.size(2), mel_db_batch.size(3))
+            )
+            labels = labels.reshape(cfg.N * cfg.M)
 
-            # random permute the batch
-            perm = torch.randperm(hp.train.N * hp.train.M)
+            perm = torch.randperm(cfg.N * cfg.M)
             unperm = torch.argsort(perm)
 
             mel_db_batch = mel_db_batch[perm]
@@ -166,25 +149,16 @@ def train(hp: Config, cfg: str, enable_wandb: bool):
             with autocast():
                 embeddings = embedder_net(mel_db_batch)
                 embeddings = embeddings[unperm]
-                if hp.train.loss in {'GE2E'}:
-                    embeddings = torch.reshape(
-                        embeddings, (hp.train.N, hp.train.M, embeddings.size(1)))
-                    # wants (Speaker, Utterances, embedding)
+                if cfg.loss == 'GE2E':
+                    embeddings = torch.reshape(embeddings, (cfg.N, cfg.M, embeddings.size(1)))
                     loss, prec1 = criterion(embeddings)
-                    if batch_id % 100 == 0:
-                        print('batch acc:', prec1.item())
-                elif hp.train.loss in {'AAM', 'AAMSC', 'CE'}:
-                    if hp.train.loss != 'CE':
-                        if epoch >= 200:
-                            criterion.easy_margin = False
+                else:
+                    assert cfg.loss in ('AAM', 'AAMSC', 'CE')
+                    if cfg.loss != 'CE' and epoch == 200:
+                        criterion.easy_margin = False
                     loss = criterion(embeddings, labels)
                     if isinstance(loss, tuple):
                         loss, prec1 = loss
-                        if batch_id % 100 == 0:
-                            print('batch acc:', prec1.item())
-                else:
-                    raise NotImplementedError(
-                        f'Unsupported loss function {hp.train.loss}')
 
             scaler.scale(loss).backward()
             scaler.unscale_(optimizer)
@@ -194,47 +168,26 @@ def train(hp: Config, cfg: str, enable_wandb: bool):
             scaler.step(optimizer)
             scaler.update()
 
-            total_loss = total_loss + loss
-            iteration += 1
-            if (batch_id + 1) % hp.train.log_interval == 0:
-                mesg = '{0}\tEpoch:{1}[{2}/{3}],Iteration:{4}\tLoss:{5:.4f}\tTLoss:{6:.4f}\t\n'.format(
-                    time.ctime(),
-                    epoch + 1,
-                    batch_id + 1,
-                    len(train_dataset) // hp.train.N,
-                    iteration,
-                    loss,
-                    total_loss / (batch_id + 1))
+            total_loss += loss
 
-                writer.add_scalar('Loss/train', loss, iteration)
-                print(mesg)
+            if enable_wandb:
+                # TODO log data
+                pass
 
-        # Save the training result.
-        if hp.train.checkpoint_dir is not None and (
-                epoch + 1) % hp.train.checkpoint_interval == 0:
+        if (epoch + 1) % cfg.checkpoint == 0:
             embedder_net.eval().cpu()
-            ckpt_model_filename = f"ckpt_epoch_{epoch + 1}.pth"
-            ckpt_model_path = os.path.join(
-                hp.train.checkpoint_dir, ckpt_model_filename)
-            torch.save(embedder_net.state_dict(), ckpt_model_path)
+            torch.save(embedder_net.state_dict(), model_dir / f'model-epoch-{epoch + 1}.pth')
             embedder_net.to(device).train()
 
             criterion.eval().cpu()
-            ckpt_criterion_filename = f"ckpt_criterion_epoch_{epoch + 1}.pth"
-            ckpt_criterion_path = os.path.join(
-                hp.train.checkpoint_dir, ckpt_criterion_filename)
-            torch.save(criterion.state_dict(), ckpt_criterion_path)
+            torch.save(criterion.state_dict(), model_dir / f'loss-epoch-{epoch + 1}.pth')
             criterion.to(device).train()
 
-            print('Saved checkpoint to', ckpt_model_path)
-
-    # Save model
     embedder_net.eval().cpu()
-    ckpt_model_filename = "ckpt_final.pth"
-    ckpt_model_path = os.path.join(hp.train.checkpoint_dir, ckpt_model_filename)
-    torch.save(embedder_net.state_dict(), ckpt_model_path)
+    torch.save(embedder_net.state_dict(), model_dir / 'ckpt-final.pth')
 
-    print("\nDone, trained model saved at", ckpt_model_path)
+    if enable_wandb:
+        wandb.finish()
 
 
 def test_one(hp: Config):
@@ -387,15 +340,3 @@ def test(hp: Config, csv_path: str):
 
     else:
         print("model_path is not a file or a directory")
-
-
-def main(args):
-    set_random_seed_to(1)
-
-    hp = Hparam(args.cfg)
-    if hp.stage == 'train':
-        print(f"Train {hp.train.noise_type} Experiment")
-        train(hp, args.cfg)
-    else:
-        print("Test Experiment")
-        test(hp, args.csv)

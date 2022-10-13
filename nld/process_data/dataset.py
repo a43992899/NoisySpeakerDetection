@@ -9,24 +9,13 @@ import torch
 from torch.utils.data import Dataset
 from tqdm import tqdm
 
-from ..constant.config import Config, DataConfig
-from ..utils import set_random_seed_to
-
-# TODO set random seed at a global level? Might not be a good idea...
-# set_random_seed_to(1)
-
-
-# TODO: unused function?
-def relabel(selected_file, utter_index, mislabel_dict):
-    key = selected_file + "_{}".format(utter_index)
-    if key in mislabel_dict:
-        return mislabel_dict[key]
+from ..constant.config import Config
 
 
 class SpeakerDataset(Dataset):
-    utterance_files: List[Path]
+    utterance_dir: Path
+    utterance_files: List[str]
     spkr2id: Dict[str, int]
-    data_processing_config: DataConfig
     mislabeled_mapping: Optional[Dict[str, str]]
 
     def __init__(self, utterance_dir: Path, mislabeled_json_file: Optional[Path]) -> None:
@@ -54,24 +43,29 @@ class SpeakerDataset(Dataset):
             if not mislabeled_json_file.is_file():
                 raise IsADirectoryError()
 
-        self.utterance_files = list()
-        for f in sorted(utterance_dir.iterdir()):
-            if f.suffix == '.npy':
-                self.utterance_files.append(f)
+        self.utterance_dir = utterance_dir
+        self.utterance_files = sorted(os.listdir(utterance_dir))
         with open(spkr2id_file, 'r') as f:
-            self.spkr2id_file = json.load(f)
-        with open(mislabeled_json_file, 'r') as f:
-            self.data_processing_config = DataConfig(**json.load(f))
+            self.spkr2id = json.load(f)
         if mislabeled_json_file is not None:
-            with open(mislabeled_json_file):
+            with open(mislabeled_json_file, 'r') as f:
                 self.mislabeled_mapping = json.load(f)
 
     def __len__(self):
         return len(self.utterance_files)
 
     def __getitem__(self, idx: int):
-        # TODO: how to get items?
-        selected_utterance = self.utterance_files[idx]
+        selected_file = self.utterance_dir / self.utterance_files[idx]
+        assert selected_file.suffix == '.npy'
+        speaker_label = selected_file.stem.split('-')[0]
+        speaker_id = self.spkr2id[speaker_label]
+        if self.mislabeled_mapping is not None:
+            speaker_id = self.mislabeled_mapping.get(speaker_label, speaker_id)
+        # TODO: should we return multiple utterances?
+
+    @staticmethod
+    def collate_fn(batch):
+        pass
 
 
 class SpeakerDatasetPreprocessed(Dataset):

@@ -2,6 +2,15 @@
   "version": "0.2.0",
   "configurations": [
     {
+      "name": "Training",
+      "type": "python",
+      "request": "launch",
+      "program": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "justMyCode": true,
+      "args": ["train", "CE", "20", "Permute"]
+    },
+    {
       "name": "Process Mel Spectrogram",
       "type": "python",
       "request": "launch",

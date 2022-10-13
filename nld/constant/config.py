@@ -33,7 +33,8 @@ class BaseConfig:
 
 @dataclass
 class NewTrainConfig(BaseConfig):
-    restore_from: str
+    restore_model_from: str
+    restore_loss_from: str
 
     noise_level: NoiseLevel
     noise_type: NoiseType
@@ -43,9 +44,9 @@ class NewTrainConfig(BaseConfig):
     M: int
     s: int
     m: float
-    k: int
+    K: int
 
-    epochs: int
+    epoches: int
     optimizer: OptimizerType
     learning_rate: float
 
