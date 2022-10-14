@@ -32,10 +32,12 @@ produce_mel_spectrogram_parser.add_argument('--silence-threshold', type=int, def
 
 produce_noisy_label_parser = main_subparser.add_parser('produce-noisy-label')
 produce_noisy_label_parser.set_defaults(main_func=produce_noisy_label)
-produce_noisy_label_parser.add_argument('--mislabeled-json-dir', type=Path,
-                                        default=DEFAULT_VOXCELEB_MISLABELED_JSON_DIR)
-produce_noisy_label_parser.add_argument('--vox1-output-dir', type=Path, default=DEFAULT_VOX1_MEL_SPECTROGRAM_DIR)
-produce_noisy_label_parser.add_argument('--vox2-output-dir', type=Path, default=DEFAULT_VOX2_MEL_SPECTROGRAM_DIR)
+produce_noisy_label_parser.add_argument(
+    '--mislabeled-json-dir', type=Path, default=DEFAULT_VOXCELEB_MISLABELED_JSON_DIR)
+produce_noisy_label_parser.add_argument(
+    '--vox1-mel-spectrogram-dir', type=Path, default=DEFAULT_VOX1_MEL_SPECTROGRAM_DIR)
+produce_noisy_label_parser.add_argument(
+    '--vox2-mel-spectrogram-dir', type=Path, default=DEFAULT_VOX2_MEL_SPECTROGRAM_DIR)
 produce_noisy_label_parser.add_argument('--random-seed', type=int, default=DEFAULT_RANDOM_SEED)
 
 
@@ -47,7 +49,7 @@ train_parser.add_argument('noise_type', choices=NOISE_TYPES, type=str)
 
 train_parser.add_argument('--N', default=-1, type=int)
 train_parser.add_argument('--M', default=-1, type=int)
-train_parser.add_argument('--s', default=-1, type=int)
+train_parser.add_argument('--s', default=-1, type=float)
 train_parser.add_argument('--m', default=-1, type=float)
 train_parser.add_argument('--K', default=-1, type=int)
 

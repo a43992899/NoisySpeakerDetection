@@ -16,7 +16,7 @@ from tqdm import tqdm
 
 from ..constant.config import Config, NewTrainConfig
 from ..constant.entities import WANDB_ENTITY, WANDB_PROJECT
-from ..model.loss import (AAMSoftmax, GE2ELoss_, SubcenterArcMarginProduct,
+from ..model.loss import (AAMSoftmax, GE2ELoss, SubcenterArcMarginProduct,
                           get_centroids)
 from ..model.model import SpeechEmbedder
 from ..process_data.dataset import SpeakerDataset, SpeakerDatasetPreprocessed
@@ -40,10 +40,10 @@ def train(
             name=job_name
         )
 
-    model_dir = training_model_save_dir / job_name
-    print(f'Checkpoint saving dir: {model_dir}')
-    model_dir.mkdir()
-    cfg.to_json(model_dir / 'config.json')
+    checkpoint_dir = training_model_save_dir / job_name
+    print(f'Checkpoint saving dir: {checkpoint_dir}')
+    checkpoint_dir.mkdir()
+    cfg.to_json(checkpoint_dir / 'config.json')
 
     spkr2id_file = utterance_dir / 'spkr2id.json'
     with open(spkr2id_file, 'r') as f:
@@ -55,7 +55,7 @@ def train(
     if cfg.loss == 'CE':
         criterion = torch.nn.NLLLoss()
     elif cfg.loss == 'GE2E':
-        criterion = GE2ELoss_(loss_method='softmax')
+        criterion = GE2ELoss(loss_method='softmax')
     elif cfg.loss == 'AAM':
         criterion = AAMSoftmax(
             cfg.model_projection_size, utterance_classes_num,
@@ -123,7 +123,7 @@ def train(
 
     embedder_net.train()
     # for epoch in range(restored_epoch, hp.train.epochs):
-    for epoch in range(cfg.epoches):
+    for epoch in range(cfg.iterations):
         total_loss = 0
         for batch_id, (mel_db_batch, labels, is_noisy, utterance_ids) in enumerate(train_data_loader):
             utterance_ids = np.array(utterance_ids).T
@@ -173,15 +173,15 @@ def train(
 
         if (epoch + 1) % cfg.checkpoint == 0:
             embedder_net.eval().cpu()
-            torch.save(embedder_net.state_dict(), model_dir / f'model-epoch-{epoch + 1}.pth')
+            torch.save(embedder_net.state_dict(), checkpoint_dir / f'model-epoch-{epoch + 1}.pth')
             embedder_net.to(device).train()
 
             criterion.eval().cpu()
-            torch.save(criterion.state_dict(), model_dir / f'loss-epoch-{epoch + 1}.pth')
+            torch.save(criterion.state_dict(), checkpoint_dir / f'loss-epoch-{epoch + 1}.pth')
             criterion.to(device).train()
 
     embedder_net.eval().cpu()
-    torch.save(embedder_net.state_dict(), model_dir / 'ckpt-final.pth')
+    torch.save(embedder_net.state_dict(), checkpoint_dir / 'ckpt-final.pth')
 
     if enable_wandb:
         wandb.finish()

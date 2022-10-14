@@ -12,7 +12,7 @@ from tqdm import tqdm
 
 from .constant.config import Hparam
 from .model.beta_mixture import fit_bmm
-from .model.loss import (AAMSoftmax, GE2ELoss_, SpeechEmbedder,
+from .model.loss import (AAMSoftmax, GE2ELoss, SpeechEmbedder,
                          SpeechEmbedder_Softmax, SubcenterArcMarginProduct,
                          get_cossim)
 from .process_data.dataset import SpeakerDatasetPreprocessed
@@ -60,7 +60,7 @@ def get_criterion(device, model_path):
     if loss_type == 'Softmax':
         criterion = torch.nn.NLLLoss()
     elif loss_type == 'GE2E':
-        criterion = GE2ELoss_(init_w=10.0, init_b=-5.0, loss_method='softmax').to(device)
+        criterion = GE2ELoss(init_w=10.0, init_b=-5.0, loss_method='softmax').to(device)
     elif loss_type == 'AAM':
         criterion = AAMSoftmax(hp.model.proj, 5994, scale=hp.train.s, margin=hp.train.m, easy_margin=True).to(device)
     elif loss_type == 'AAMSC':

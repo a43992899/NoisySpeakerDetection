@@ -46,7 +46,8 @@ class NewTrainConfig(BaseConfig):
     m: float
     K: int
 
-    epoches: int
+    # TODO: fix iteration related stuff.
+    iterations: int
     optimizer: OptimizerType
     learning_rate: float
 

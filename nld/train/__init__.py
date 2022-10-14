@@ -38,7 +38,7 @@ def train_main(args):
         m=args.m,
         K=args.K,
 
-        epoches=args.epoches,
+        iterations=args.epoches,
         optimizer=args.optimizer,
         learning_rate=args.learning_rate,
         dataloader_num_workers=args.dataloader_num_workers,
