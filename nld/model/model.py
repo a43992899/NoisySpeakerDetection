@@ -48,8 +48,7 @@ class SpeechEmbedder(nn.Module):
 
     def get_embedding(self, x: Tensor) -> Tensor:
         x, _ = self.lstm(x.float())  # (batch, frames, n_mels)
-        # only use last frame
-        x = x[:, x.size(1) - 1]
+        x = x[:, -1, :]  # only use last frame
         x = self.projection(x.float())
         x = x / torch.norm(x, dim=1).unsqueeze(1)
         return x

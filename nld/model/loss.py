@@ -135,7 +135,7 @@ class AAMSoftmax(nn.Module):
         else:
             phi = torch.where((cosine - self.th) > 0, phi, cosine - self.mm)
 
-        #one_hot = torch.zeros(cosine.size(), device='cuda' if torch.cuda.is_available() else 'cpu')
+        # one_hot = torch.zeros(cosine.size(), device='cuda' if torch.cuda.is_available() else 'cpu')
         one_hot = torch.zeros_like(cosine)
         one_hot.scatter_(1, label.view(-1, 1), 1)
         output = (one_hot * phi) + ((1.0 - one_hot) * cosine)
@@ -150,6 +150,12 @@ class SubcenterArcMarginProduct(nn.Module):
     r"""Modified implementation from
     https://github.com/ronghuaiyang/arcface-pytorch/blob/47ace80b128042cd8d2efd408f55c5a3e156b032/models/metrics.py#L10
     """
+
+    s: float
+    m: float
+    K: int
+
+    easy_margin: bool
 
     def __init__(self, in_features, out_features, K=3, s=30.0, m=0.50, easy_margin=False):
         super(SubcenterArcMarginProduct, self).__init__()
@@ -168,32 +174,32 @@ class SubcenterArcMarginProduct(nn.Module):
         self.mm = math.sin(math.pi - m) * m
         self.ce_loss = nn.CrossEntropyLoss()
 
-    def predict(self, input: torch.Tensor):
-        # --------------------------- cos(theta) & phi(theta) ---------------------------
-        cosine = F.linear(F.normalize(input), F.normalize(self.weight))
+    # def predict(self, input: torch.Tensor):
+    #     # --------------------------- cos(theta) & phi(theta) ---------------------------
+    #     cosine = F.linear(F.normalize(input), F.normalize(self.weight))
 
-        if self.K > 1:
-            cosine = torch.reshape(cosine, (-1, self.out_features, self.K))
-            cosine, _ = torch.max(cosine, axis=2)
+    #     if self.K > 1:
+    #         cosine = torch.reshape(cosine, (-1, self.out_features, self.K))
+    #         cosine, _ = torch.max(cosine, axis=2)
 
-        sine = torch.sqrt((1.0 - torch.pow(cosine, 2)).clamp(0, 1))
-        # cos(phi+m)
-        phi = cosine * self.cos_m - sine * self.sin_m
+    #     sine = torch.sqrt((1.0 - torch.pow(cosine, 2)).clamp(0, 1))
+    #     # cos(phi+m)
+    #     phi = cosine * self.cos_m - sine * self.sin_m
 
-        phi = torch.where(cosine > 0, phi, cosine)
+    #     phi = torch.where(cosine > 0, phi, cosine)
 
-        # --------------------------- convert label to one-hot ---------------------------
-        # one_hot = torch.zeros(cosine.size(), requires_grad=True, device='cuda')
-        one_hot = torch.zeros(cosine.size(), device='cuda')
-        one_hot.scatter_(1, label.view(-1, 1).long(), 1)
-        # -------------torch.where(out_i = {x_i if condition_i else y_i) -------------
-        # you can use torch.where if your torch.__version__ is 0.4
-        output = (one_hot * phi) + ((1.0 - one_hot) * cosine)
-        output *= self.s
+    #     # --------------------------- convert label to one-hot ---------------------------
+    #     # one_hot = torch.zeros(cosine.size(), requires_grad=True, device='cuda')
+    #     one_hot = torch.zeros(cosine.size(), device='cuda')
+    #     one_hot.scatter_(1, label.view(-1, 1).long(), 1)
+    #     # -------------torch.where(out_i = {x_i if condition_i else y_i) -------------
+    #     # you can use torch.where if your torch.__version__ is 0.4
+    #     output = (one_hot * phi) + ((1.0 - one_hot) * cosine)
+    #     output *= self.s
 
-        return output
+    #     return output
 
-    def forward(self, input, label):
+    def forward(self, input: Tensor, label: Tensor):
         # --------------------------- cos(theta) & phi(theta) ---------------------------
         cosine = F.linear(F.normalize(input), F.normalize(self.weight))
 
@@ -210,15 +216,11 @@ class SubcenterArcMarginProduct(nn.Module):
         else:
             phi = torch.where((cosine - self.th) > 0, phi, cosine - self.mm)
 
-        # --------------------------- convert label to one-hot ---------------------------
-        # one_hot = torch.zeros(cosine.size(), requires_grad=True, device='cuda')
         one_hot = torch.zeros(cosine.size(), device='cuda')
         one_hot.scatter_(1, label.view(-1, 1).long(), 1)
-        # -------------torch.where(out_i = {x_i if condition_i else y_i) -------------
-        # you can use torch.where if your torch.__version__ is 0.4
         output = (one_hot * phi) + ((1.0 - one_hot) * cosine)
         output *= self.s
-        # print(output)
+
         loss = self.ce_loss(output, label)
         prec1 = accuracy(output.detach(), label.detach(), topk=(1,))[0]
         return loss, prec1

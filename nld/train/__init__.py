@@ -1,30 +1,18 @@
 from pathlib import Path
 
-from ..constant.config import NewTrainConfig
+from ..constant.config import TrainConfig
 from .train import train
 
 
 def train_main(args):
     mislabeled_json_dir: Path = args.mislabeled_json_dir
-    if not mislabeled_json_dir.exists():
-        raise FileNotFoundError()
-    if not mislabeled_json_dir.is_dir():
-        raise NotADirectoryError()
     vox1_mel_spectrogram_dir: Path = args.vox1_mel_spectrogram_dir
-    if not vox1_mel_spectrogram_dir.exists():
-        raise FileNotFoundError()
-    if not vox1_mel_spectrogram_dir.is_dir():
-        raise NotADirectoryError()
     vox2_mel_spectrogram_dir: Path = args.vox2_mel_spectrogram_dir
-    if not vox2_mel_spectrogram_dir.exists():
-        raise FileNotFoundError()
-    if not vox2_mel_spectrogram_dir.is_dir():
-        raise NotADirectoryError()
 
     training_model_save_dir: Path = args.training_model_save_dir
     training_model_save_dir.mkdir(parents=True, exist_ok=True)
 
-    cfg = NewTrainConfig(
+    cfg = TrainConfig(
         restore_model_from=args.restore_model_from,
         restore_loss_from=args.restore_loss_from,
         loss=args.loss,
@@ -37,7 +25,7 @@ def train_main(args):
         m=args.m,
         K=args.K,
 
-        iterations=args.epoches,
+        iterations=args.iterations,
         optimizer=args.optimizer,
         learning_rate=args.learning_rate,
         dataloader_num_workers=args.dataloader_num_workers,
@@ -46,7 +34,8 @@ def train_main(args):
         model_projection_size=args.model_projection_size,
         random_seed=args.random_seed,
     )
-    enable_wandb: bool = args.enable_wandb
+    debug: bool = args.debug
+    save_interval: int = args.save_interval
 
     for mislabeled_json_file in mislabeled_json_dir.iterdir():
         if not mislabeled_json_file.is_file():
@@ -59,7 +48,7 @@ def train_main(args):
 
     train(
         cfg, mislabeled_json_file, vox1_mel_spectrogram_dir, vox2_mel_spectrogram_dir,
-        training_model_save_dir, enable_wandb
+        training_model_save_dir, save_interval, debug
     )
 
 
