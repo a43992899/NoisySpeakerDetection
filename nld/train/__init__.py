@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from ..constant.config import NewTrainConfig
-from .train_speech_embedder import train
+from .train import train
 
 
 def train_main(args):
@@ -10,17 +10,16 @@ def train_main(args):
         raise FileNotFoundError()
     if not mislabeled_json_dir.is_dir():
         raise NotADirectoryError()
-
-    utterance_dir: Path = args.utterance_dir
-    if not utterance_dir.exists():
+    vox1_mel_spectrogram_dir: Path = args.vox1_mel_spectrogram_dir
+    if not vox1_mel_spectrogram_dir.exists():
         raise FileNotFoundError()
-    if not utterance_dir.is_dir():
+    if not vox1_mel_spectrogram_dir.is_dir():
         raise NotADirectoryError()
-    spkr2id_file = utterance_dir / 'spkr2id.json'
-    if not spkr2id_file.exists():
+    vox2_mel_spectrogram_dir: Path = args.vox2_mel_spectrogram_dir
+    if not vox2_mel_spectrogram_dir.exists():
         raise FileNotFoundError()
-    if not spkr2id_file.is_file():
-        raise IsADirectoryError()
+    if not vox2_mel_spectrogram_dir.is_dir():
+        raise NotADirectoryError()
 
     training_model_save_dir: Path = args.training_model_save_dir
     training_model_save_dir.mkdir(parents=True, exist_ok=True)
@@ -58,7 +57,10 @@ def train_main(args):
     else:
         raise FileNotFoundError()
 
-    train(cfg, mislabeled_json_file, utterance_dir, training_model_save_dir, enable_wandb)
+    train(
+        cfg, mislabeled_json_file, vox1_mel_spectrogram_dir, vox2_mel_spectrogram_dir,
+        training_model_save_dir, enable_wandb
+    )
 
 
 def test_main(args):
