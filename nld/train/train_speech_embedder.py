@@ -16,8 +16,7 @@ from tqdm import tqdm
 
 from ..constant.config import Config, NewTrainConfig
 from ..constant.entities import WANDB_ENTITY, WANDB_PROJECT
-from ..model.loss import (AAMSoftmax, GE2ELoss, SubcenterArcMarginProduct,
-                          get_centroids)
+from ..model.loss import AAMSoftmax, GE2ELoss, SubcenterArcMarginProduct
 from ..model.model import SpeechEmbedder
 from ..process_data.dataset import SpeakerDataset, SpeakerDatasetPreprocessed
 from ..utils import (compute_eer, current_utc_time, get_all_file_with_ext,

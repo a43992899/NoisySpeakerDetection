@@ -13,28 +13,35 @@ from ..constant.config import Config
 
 
 class SpeakerDataset(Dataset):
-    utterance_dir: Path
-    utterance_files: List[str]
-    spkr2id: Dict[str, int]
+    sample_num: int
+    vox1_mel_spectrogram_dir: Path
+    vox2_mel_spectrogram_dir: Path
+
+    speaker_label_to_utterances: Dict[str, List[str]]
+    speaker_label_to_id: Dict[str, int]
+    speaker_labels = List[str]
+
     mislabeled_mapping: Optional[Dict[str, str]]
 
-    def __init__(self, utterance_dir: Path, mislabeled_json_file: Optional[Path]) -> None:
+    def __init__(
+        self, sample_num: int, vox1_mel_spectrogram_dir: Path,
+        vox2_mel_spectrogram_dir: Path, mislabeled_json_file: Optional[Path]
+    ) -> None:
         super().__init__()
-        if not utterance_dir.exists():
+        if not vox1_mel_spectrogram_dir.exists():
             raise FileNotFoundError()
-        if not utterance_dir.is_dir():
+        if not vox1_mel_spectrogram_dir.is_dir():
             raise NotADirectoryError()
 
-        spkr2id_file = utterance_dir / 'spkr2id.json'
-        if not spkr2id_file.exists():
+        if not vox2_mel_spectrogram_dir.exists():
             raise FileNotFoundError()
-        if not spkr2id_file.is_file():
-            raise IsADirectoryError()
+        if not vox2_mel_spectrogram_dir.is_dir():
+            raise NotADirectoryError()
 
-        processing_config = utterance_dir / 'data-processing-config.json'
-        if not processing_config.exists():
+        vox2_speaker_label_to_id_file = vox2_mel_spectrogram_dir / 'speaker-label-to-id.json'
+        if not vox2_speaker_label_to_id_file.exists():
             raise FileNotFoundError()
-        if not processing_config.is_file():
+        if not vox2_speaker_label_to_id_file.is_file():
             raise IsADirectoryError()
 
         if mislabeled_json_file is not None:
@@ -43,25 +50,44 @@ class SpeakerDataset(Dataset):
             if not mislabeled_json_file.is_file():
                 raise IsADirectoryError()
 
-        self.utterance_dir = utterance_dir
-        self.utterance_files = sorted(os.listdir(utterance_dir))
-        with open(spkr2id_file, 'r') as f:
-            self.spkr2id = json.load(f)
+        if sample_num < 1:
+            raise ValueError()
+        if sample_num > 32:
+            raise ValueError()
+
+        self.sample_num = sample_num
+        self.vox1_mel_spectrogram_dir = vox1_mel_spectrogram_dir
+        self.vox2_mel_spectrogram_dir = vox2_mel_spectrogram_dir
+
+        self.speaker_label_to_utterances = dict()
+        for utterance_file in vox2_mel_spectrogram_dir.iterdir():
+            if not utterance_file.suffix == '.npy':
+                continue
+            speaker_label, _ = utterance_file.stem.split('-')
+            if speaker_label not in self.speaker_label_to_utterances:
+                self.speaker_label_to_utterances[speaker_label] = [utterance_file.name]
+            else:
+                self.speaker_label_to_utterances[speaker_label].append(utterance_file.name)
+
+        with open(vox2_speaker_label_to_id_file, 'r') as f:
+            self.speaker_label_to_id = json.load(f)
+        
+        assert len(self.speaker_label_to_utterances) == len(self.speaker_label_to_id)
+        self.speaker_labels = sorted(self.speaker_label_to_id.keys())
+
         if mislabeled_json_file is not None:
             with open(mislabeled_json_file, 'r') as f:
                 self.mislabeled_mapping = json.load(f)
 
     def __len__(self):
-        return len(self.utterance_files)
+        return len(self.speaker_labels)
 
     def __getitem__(self, idx: int):
-        selected_file = self.utterance_dir / self.utterance_files[idx]
-        assert selected_file.suffix == '.npy'
-        speaker_label = selected_file.stem.split('-')[0]
-        speaker_id = self.spkr2id[speaker_label]
-        if self.mislabeled_mapping is not None:
-            speaker_id = self.mislabeled_mapping.get(speaker_label, speaker_id)
-        # TODO: should we return multiple utterances?
+        # TODO
+        selected_speaker_label = self.speaker_labels[idx]
+        selected_speaker_mel_spectrogram = random.sample(
+            self.speaker_label_to_utterances[selected_speaker_label], self.sample_num
+        )
 
     @staticmethod
     def collate_fn(batch):

@@ -67,11 +67,11 @@ def produce_mel_spectrogram(args):
                         spectrogram = np.abs(spectrogram) ** 2
                         spectrogram = np.log10(np.dot(mel_basis, spectrogram) + 1e-6)
 
-                        spec1 = spectrogram[np.newaxis, :, :cfg.tisv_frame]
+                        spec1 = spectrogram[:, :cfg.tisv_frame]
                         np.save(output_dir / f'{speaker}-{utterance_index}.npy', spec1)
                         utterance_index += 1
 
-                        spec2 = spectrogram[np.newaxis, :, -cfg.tisv_frame:]
+                        spec2 = spectrogram[:, -cfg.tisv_frame:]
                         np.save(output_dir / f'{speaker}-{utterance_index}.npy', spec2)
                         utterance_index += 1
 
@@ -101,10 +101,9 @@ def produce_noisy_label(args):
     if not vox2_speaker_label_to_id_file.is_file():
         raise IsADirectoryError()
 
-    vox1_utterance_files = sorted(p for p in vox1_mel_spectrogram_dir.iterdir() if p.suffix == '.npy')
+    vox1_mel_spectrograms = sorted(p.name for p in vox1_mel_spectrogram_dir.iterdir() if p.suffix == '.npy')
     with open(vox2_speaker_label_to_id_file, 'r') as f:
-        vox2_speaker_label_to_id_dict: Dict[str, int] = json.load(f)
-        vox2_speaker_labels = list(vox2_speaker_label_to_id_dict.keys())
+        vox2_speaker_labels = list(json.load(f).keys())
 
     for noise_level in NOISE_LEVELS:
         if noise_level == 0:
@@ -113,16 +112,16 @@ def produce_noisy_label(args):
             print(f'Processing {noise_level = } and {noise_type = }')
             mislabeled_dict: Dict[str, str] = dict()
 
-            for vox2_spkr2id in vox2_mel_spectrogram_dir.iterdir():
+            for vox2_mel_spectrogram in vox2_mel_spectrogram_dir.iterdir():
                 if random.random() <= noise_level / 100:
                     if noise_type == 'Permute':
-                        mislabeled_dict[vox2_spkr2id.stem] = random.choice(vox2_speaker_labels)
+                        mislabeled_dict[vox2_mel_spectrogram.name] = random.choice(vox2_speaker_labels)
                     elif noise_type == 'Open':
-                        mislabeled_dict[vox2_spkr2id.stem] = random.choice(vox1_utterance_files)
+                        mislabeled_dict[vox2_mel_spectrogram.name] = random.choice(vox1_mel_spectrograms)
                     else:
                         assert noise_type == 'Mix'
-                        mislabeled_dict[vox2_spkr2id.stem] = random.choice(
-                            vox1_utterance_files if random.random() <= 0.5 else vox2_speaker_labels
+                        mislabeled_dict[vox2_mel_spectrogram.name] = random.choice(
+                            vox1_mel_spectrograms if random.random() <= 0.5 else vox2_speaker_labels
                         )
 
             with open(mislabeled_json_dir / f'{noise_type}-{noise_level}%.json', 'w') as f:
