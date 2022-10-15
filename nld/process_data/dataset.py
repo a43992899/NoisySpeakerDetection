@@ -26,30 +26,6 @@ class SpeakerDataset(Dataset):
         vox2_mel_spectrogram_dir: Path, mislabeled_json_file: Optional[Path]
     ) -> None:
         super().__init__()
-        if not vox1_mel_spectrogram_dir.exists():
-            raise FileNotFoundError()
-        if not vox1_mel_spectrogram_dir.is_dir():
-            raise NotADirectoryError()
-
-        if not vox2_mel_spectrogram_dir.exists():
-            raise FileNotFoundError()
-        if not vox2_mel_spectrogram_dir.is_dir():
-            raise NotADirectoryError()
-
-        vox2_speaker_label_to_id_file = vox2_mel_spectrogram_dir / 'speaker-label-to-id.json'
-        if not vox2_speaker_label_to_id_file.exists():
-            raise FileNotFoundError()
-        if not vox2_speaker_label_to_id_file.is_file():
-            raise IsADirectoryError()
-
-        if mislabeled_json_file is not None:
-            if not mislabeled_json_file.exists():
-                raise FileNotFoundError()
-            if not mislabeled_json_file.is_file():
-                raise IsADirectoryError()
-
-        if not 1 <= sample_num <= 32:
-            raise ValueError()
 
         self.sample_num = sample_num
         self.vox1_mel_spectrogram_dir = vox1_mel_spectrogram_dir
@@ -65,7 +41,7 @@ class SpeakerDataset(Dataset):
             except KeyError:
                 self.speaker_label_to_utterances[speaker_label] = [utterance_file.name]
 
-        with open(vox2_speaker_label_to_id_file, 'r') as f:
+        with open(vox2_mel_spectrogram_dir / 'speaker-label-to-id.json', 'r') as f:
             self.speaker_label_to_id = json.load(f)
 
         assert len(self.speaker_label_to_utterances) == len(self.speaker_label_to_id)
@@ -85,7 +61,7 @@ class SpeakerDataset(Dataset):
             self.speaker_label_to_utterances[selected_speaker_label], self.sample_num
         )
         selected_speaker_mel_spectrogram_files_untainted = [
-            str(self.vox2_mel_spectrogram_dir / file)
+            self.vox2_mel_spectrogram_dir / file
             for file in selected_speaker_mel_spectrogram_files
         ]
         selected_labels = [selected_speaker_label for _ in range(self.sample_num)]

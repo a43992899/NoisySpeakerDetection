@@ -18,7 +18,7 @@ from ..constant.config import Config, NewTrainConfig
 from ..constant.entities import WANDB_ENTITY, WANDB_PROJECT
 from ..model.loss import AAMSoftmax, GE2ELoss, SubcenterArcMarginProduct
 from ..model.model import SpeechEmbedder
-from ..process_data.dataset import SpeakerDataset, SpeakerDatasetPreprocessed
+from ..process_data.dataset import SpeakerDataset
 from ..utils import (compute_eer, current_utc_time, get_all_file_with_ext,
                      isTarget, set_random_seed_to, write_to_csv)
 
