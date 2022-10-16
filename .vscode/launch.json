@@ -10,7 +10,7 @@
       "justMyCode": true,
       "args": [
         "train",
-        "GE2E",
+        "CE",
         "20",
         "Permute",
         "--N",
