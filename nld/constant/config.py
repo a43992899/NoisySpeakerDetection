@@ -44,7 +44,6 @@ class TrainConfig(BaseConfig):
     m: float
     K: int
 
-    # TODO: fix iteration related stuff.
     iterations: int
     optimizer: OptimizerType
     learning_rate: float
@@ -55,6 +54,11 @@ class TrainConfig(BaseConfig):
 
     dataloader_num_workers: int
     random_seed: int
+
+    def assert_attr(self, *attrs: str):
+        for attr in attrs:
+            if getattr(self, attr) == -1:
+                raise ValueError()
 
 
 @dataclass

@@ -20,12 +20,6 @@ from ..process_data.dataset import SpeakerDataset
 from ..utils import current_utc_time, set_random_seed_to
 
 
-def _assert_cfg_attr(cfg: TrainConfig, *args: str):
-    for attr in args:
-        if getattr(cfg, attr) == -1:
-            raise ValueError()
-
-
 def train(
     cfg: TrainConfig, mislabeled_json_file: Path, vox1_mel_spectrogram_dir: Path,
     vox2_mel_spectrogram_dir: Path, training_model_save_dir: Path, save_interval: int, debug: bool
@@ -66,13 +60,13 @@ def train(
     ).to(device)
 
     if cfg.loss == 'CE':
-        _assert_cfg_attr(cfg, 'N', 'M')
+        cfg.assert_attr('N', 'M')
         criterion = torch.nn.NLLLoss()
     elif cfg.loss == 'GE2E':
-        _assert_cfg_attr(cfg, 'N', 'M')
+        cfg.assert_attr('N', 'M')
         criterion = GE2ELoss()
     elif cfg.loss == 'AAM':
-        _assert_cfg_attr(cfg, 'N', 'M', 's', 'm')
+        cfg.assert_attr('N', 'M', 's', 'm')
         print(f'At an early stage, easy_margin is enabled for AAM. '
               f'easy_margin flag will be turned down after {iterations // 8} iterations.')
         criterion = AAMSoftmax(
@@ -80,7 +74,7 @@ def train(
             scale=cfg.s, margin=cfg.m, easy_margin=True
         )
     elif cfg.loss == 'AAMSC':
-        _assert_cfg_attr(cfg, 'N', 'M', 's', 'm', 'K')
+        cfg.assert_attr('N', 'M', 's', 'm', 'K')
         print(f'At an early stage, easy_margin is enabled for AAMSC. '
               f'easy_margin flag will be turned down after {iterations // 8} iterations.')
         criterion = SubcenterArcMarginProduct(
