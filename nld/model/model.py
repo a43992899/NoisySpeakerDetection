@@ -34,7 +34,7 @@ class SpeechEmbedder(nn.Module):
                 raise ValueError()
             self.projection2 = nn.Linear(projection_size, num_classes)
             self.bn1 = nn.BatchNorm1d(num_classes)
-            self.softmax = nn.LogSoftmax(dim=1)
+            self.softmax = nn.LogSoftmax(dim=-1)
         else:
             self.projection2 = None
             self.bn1 = None
@@ -43,25 +43,27 @@ class SpeechEmbedder(nn.Module):
     def forward(self, x: Tensor):
         x = self.get_embedding(x)
         if self.should_softmax:
-            x = self.get_confidence(x)
+            x = self.projection2(x.float())
+            x = self.bn1(x)
+            x = self.softmax(x)
         return x
 
     def get_embedding(self, x: Tensor) -> Tensor:
         x, _ = self.lstm(x.float())  # (batch, frames, n_mels)
         x = x[:, -1, :]  # only use last frame
         x = self.projection(x.float())
-        x = x / torch.norm(x, dim=1).unsqueeze(1)
+        x = x / torch.norm(x, dim=-1).unsqueeze(1)
         return x
 
-    def get_confidence(self, x: Tensor) -> Tensor:
-        if not self.should_softmax:
-            raise ValueError()
-        assert self.projection2 is not None
-        assert self.bn1 is not None
-        assert self.projection2 is not None
+    # def get_confidence(self, x: Tensor) -> Tensor:
+    #     if not self.should_softmax:
+    #         raise ValueError()
+    #     assert self.projection2 is not None
+    #     assert self.bn1 is not None
+    #     assert self.softmax is not None
 
-        x = self.projection2(x.float())
-        x = self.bn1(x)
-        x = F.softmax(x)  # TODO: logsoftmax or softmax?
-        # x = self.softmax(x)
-        return x
+    #     x = self.projection2(x.float())
+    #     x = self.bn1(x)
+    #     # x = F.softmax(x)  # TODO: logsoftmax or softmax?
+    #     x = self.softmax(x)
+    #     return x

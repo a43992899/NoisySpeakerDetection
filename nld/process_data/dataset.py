@@ -83,7 +83,7 @@ class SpeakerDataset(Dataset):
         selected_id = [self.speaker_label_to_id[label] for label in selected_labels]
 
         selected_speaker_mel_spectrogram = np.stack([
-            np.load(file) for file in selected_speaker_mel_spectrogram_files
+            np.load(file).transpose() for file in selected_speaker_mel_spectrogram_files
         ])
 
         return (

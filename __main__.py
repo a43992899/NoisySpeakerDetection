@@ -67,7 +67,7 @@ train_parser.add_argument('--training-model-save-dir', default=DEFAULT_TRAINING_
 train_parser.add_argument('--mislabeled-json-dir', default=DEFAULT_VOXCELEB_MISLABELED_JSON_DIR, type=Path)
 train_parser.add_argument('--vox1-mel-spectrogram-dir', default=DEFAULT_VOX1_MEL_SPECTROGRAM_DIR, type=Path)
 train_parser.add_argument('--vox2-mel-spectrogram-dir', default=DEFAULT_VOX2_MEL_SPECTROGRAM_DIR, type=Path)
-train_parser.add_argument('-d', '--debug', action='store-true')
+train_parser.add_argument('-d', '--debug', action='store_true')
 
 test_parser = main_subparser.add_parser('test')
 test_parser.set_defaults(main_func=test_main)

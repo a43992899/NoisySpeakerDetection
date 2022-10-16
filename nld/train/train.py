@@ -58,7 +58,7 @@ def train(
     # TODO: separate softmax from speech embedder
     embedder_net = SpeechEmbedder(
         data_processing_config.nmels,
-        cfg.lstm_hidden_size,
+        cfg.model_lstm_hidden_size,
         cfg.model_lstm_num_layers,
         cfg.model_projection_size,
         should_softmax=(cfg.loss == 'CE'),
@@ -73,12 +73,16 @@ def train(
         criterion = GE2ELoss()
     elif cfg.loss == 'AAM':
         _assert_cfg_attr(cfg, 'N', 'M', 's', 'm')
+        print(f'At an early stage, easy_margin is enabled for AAM. '
+              f'easy_margin flag will be turned down after {iterations // 8} iterations.')
         criterion = AAMSoftmax(
             cfg.model_projection_size, utterance_classes_num,
             scale=cfg.s, margin=cfg.m, easy_margin=True
         )
     elif cfg.loss == 'AAMSC':
         _assert_cfg_attr(cfg, 'N', 'M', 's', 'm', 'K')
+        print(f'At an early stage, easy_margin is enabled for AAMSC. '
+              f'easy_margin flag will be turned down after {iterations // 8} iterations.')
         criterion = SubcenterArcMarginProduct(
             cfg.model_projection_size, utterance_classes_num,
             s=cfg.s, m=cfg.m, K=cfg.K, easy_margin=True,
@@ -96,6 +100,7 @@ def train(
         num_workers=cfg.dataloader_num_workers,
         drop_last=True,
         pin_memory=True,
+        collate_fn=train_dataset.collate_fn
     )
 
     if cfg.optimizer == 'Adam':
@@ -130,10 +135,10 @@ def train(
     while iterations < cfg.iterations:
         total_loss = 0
 
-        for mels, is_noisy, ids, labels, _ in tqdm(train_data_loader, total=len(train_data_loader)):
+        for mels, is_noisy, y, _, _ in tqdm(train_data_loader, total=len(train_data_loader)):
             mels: Tensor = mels.to(device, non_blocking=True)
             is_noisy: Tensor = is_noisy.to(device)
-            ids: Tensor = ids.to(device)
+            y: Tensor = y.to(device)
 
             assert mels.dim() == 4
             mels = mels.reshape((cfg.N * cfg.M, mels.size(2), mels.size(3)))
@@ -144,13 +149,14 @@ def train(
                 embeddings = embedder_net(mels)
 
                 if cfg.loss == 'GE2E':
+                    criterion: GE2ELoss
                     embeddings = embeddings.reshape((cfg.N, cfg.M, embeddings.size(1)))
-                    loss, prec1 = criterion(embeddings)
+                    loss, prec1 = criterion(embeddings, y)
                 else:
                     assert cfg.loss in ('AAM', 'AAMSC', 'CE')
                     if cfg.loss != 'CE' and iterations == cfg.iterations // 8:
                         criterion.easy_margin = False
-                    loss = criterion(embeddings, labels)
+                    loss = criterion(embeddings, y.flatten())
                     if isinstance(loss, tuple):
                         loss, prec1 = loss
                     loss: Tensor

@@ -2,13 +2,31 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Training",
+      "name": "Training Debug",
       "type": "python",
       "request": "launch",
       "program": "${workspaceFolder}",
       "console": "integratedTerminal",
       "justMyCode": true,
-      "args": ["train", "CE", "20", "Permute"]
+      "args": [
+        "train",
+        "GE2E",
+        "20",
+        "Permute",
+        "--N",
+        "16",
+        "--M",
+        "16",
+        "--s",
+        "15",
+        "--m",
+        "0.1",
+        "--K",
+        "3",
+        "--iteration",
+        "100",
+        "--debug"
+      ]
     },
     {
       "name": "Process Mel Spectrogram",
