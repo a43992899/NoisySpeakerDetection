@@ -23,7 +23,7 @@
         "0.1",
         "--K",
         "3",
-        "--iteration",
+        "--iterations",
         "100",
         "--debug"
       ]
