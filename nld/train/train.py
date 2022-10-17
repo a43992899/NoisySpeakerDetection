@@ -25,7 +25,6 @@ def train(
     vox2_mel_spectrogram_dir: Path, training_model_save_dir: Path, save_interval: int, debug: bool
 ):
     set_random_seed_to(cfg.random_seed)
-    job_name = f'{cfg.description}'
     device = torch.device('cuda' if cuda_is_available() else 'cpu')
 
     if not debug:
@@ -33,10 +32,10 @@ def train(
             project=WANDB_TRAINING_PROJECT_NAME,
             entity=WANDB_ENTITY,
             config=cfg.to_dict(),
-            name=job_name
+            name=cfg.description
         )
 
-    checkpoint_dir = training_model_save_dir / job_name
+    checkpoint_dir = training_model_save_dir / cfg.description
     if not debug:
         checkpoint_dir.mkdir()
         cfg.to_json(checkpoint_dir / 'config.json')
