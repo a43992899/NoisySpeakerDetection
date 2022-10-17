@@ -1,7 +1,7 @@
 import json
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Literal, Tuple, Union, get_args
+from typing import Any, Dict, List, Literal, Tuple, Union, get_args
 
 NoiseLevel = Literal[0, 20, 50, 75]
 NoiseType = Literal['Permute', 'Open', 'Mix']
@@ -24,9 +24,13 @@ class BaseConfig:
             json.dump(self.to_dict(), f)
 
     @classmethod
+    def from_dict(cls, d: Dict[str, Any]):
+        return cls(**d)
+
+    @classmethod
     def from_json(cls, json_file: Union[Path, str]):
         with open(json_file, 'r') as f:
-            return cls(**json.load(f))
+            return cls.from_dict(json.load(f))
 
 
 @dataclass
@@ -59,6 +63,32 @@ class TrainConfig(BaseConfig):
         for attr in attrs:
             if getattr(self, attr) == -1:
                 raise ValueError()
+
+    @property
+    def description(self):
+        s: List[str] = []
+
+        if self.noise_level == 0:
+            s.append('clean')
+        else:
+            s.extend([self.noise_type, str(self.noise_level)])
+
+        s.append(self.loss)
+        s.append(f'bs{self.N * self.M}')
+
+        if self.loss == 'CE':
+            pass
+        elif self.loss == 'GE2E':
+            pass
+        elif self.loss == 'AAM':
+            s.extend([f's{self.s}', f'm{self.m}'])
+        else:
+            assert self.loss == 'AAMSC'
+            s.extend([f's{self.s}', f'm{self.m}', f'K{self.K}'])
+
+        s.append(f'seed{self.random_seed}')
+
+        return '-'.join(s)
 
 
 @dataclass

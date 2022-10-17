@@ -12,7 +12,7 @@ from torch.cuda.amp import GradScaler, autocast
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from ..constant.config import TrainConfig, DataConfig
+from ..constant.config import DataConfig, TrainConfig
 from ..constant.entities import WANDB_ENTITY, WANDB_PROJECT
 from ..model.loss import AAMSoftmax, GE2ELoss, SubcenterArcMarginProduct
 from ..model.model import SpeechEmbedder
@@ -25,7 +25,7 @@ def train(
     vox2_mel_spectrogram_dir: Path, training_model_save_dir: Path, save_interval: int, debug: bool
 ):
     set_random_seed_to(cfg.random_seed)
-    job_name = current_utc_time()
+    job_name = f'{cfg.description}-{current_utc_time()}'
     device = torch.device('cuda' if cuda_is_available() else 'cpu')
 
     if not debug:
@@ -38,7 +38,7 @@ def train(
 
     checkpoint_dir = training_model_save_dir / job_name
     if not debug:
-        checkpoint_dir.mkdir() 
+        checkpoint_dir.mkdir()
         cfg.to_json(checkpoint_dir / 'config.json')
         print(f'Checkpoints will be saved to `{checkpoint_dir}`')
 
@@ -49,7 +49,6 @@ def train(
 
     data_processing_config = DataConfig.from_json(vox2_mel_spectrogram_dir / 'data-processing-config.json')
 
-    # TODO: separate softmax from speech embedder
     embedder_net = SpeechEmbedder(
         data_processing_config.nmels,
         cfg.model_lstm_hidden_size,
@@ -68,21 +67,20 @@ def train(
     elif cfg.loss == 'AAM':
         cfg.assert_attr('N', 'M', 's', 'm')
         print(f'At an early stage, easy_margin is enabled for AAM. '
-              f'easy_margin flag will be turned down after {iterations // 8} iterations.')
+              f'easy_margin flag will be turned down after {cfg.iterations // 8} iterations.')
         criterion = AAMSoftmax(
             cfg.model_projection_size, utterance_classes_num,
             scale=cfg.s, margin=cfg.m, easy_margin=True
         )
-    elif cfg.loss == 'AAMSC':
+    else:
+        assert cfg.loss == 'AAMSC'
         cfg.assert_attr('N', 'M', 's', 'm', 'K')
         print(f'At an early stage, easy_margin is enabled for AAMSC. '
-              f'easy_margin flag will be turned down after {iterations // 8} iterations.')
+              f'easy_margin flag will be turned down after {cfg.iterations // 8} iterations.')
         criterion = SubcenterArcMarginProduct(
             cfg.model_projection_size, utterance_classes_num,
             s=cfg.s, m=cfg.m, K=cfg.K, easy_margin=True,
         )
-    else:
-        raise NotImplementedError('Unknown loss')
     criterion.to(device)
 
     train_dataset = SpeakerDataset(cfg.M, vox1_mel_spectrogram_dir, vox2_mel_spectrogram_dir, mislabeled_json_file)
@@ -125,56 +123,59 @@ def train(
         wandb.watch(embedder_net, criterion)
 
     embedder_net.train()
-    iterations = 0
-    while iterations < cfg.iterations:
-        total_loss = 0
+    total_iterations = 0
+    with tqdm(total=cfg.iterations) as progress_bar:
+        while total_iterations < cfg.iterations:
+            total_loss = 0.0
+            local_iterations = 0
 
-        for mels, is_noisy, y, _, _ in tqdm(train_data_loader, total=len(train_data_loader)):
-            mels: Tensor = mels.to(device, non_blocking=True)
-            is_noisy: Tensor = is_noisy.to(device)
-            y: Tensor = y.to(device)
+            for mels, is_noisy, y, _, _ in train_data_loader:
+                mels: Tensor = mels.to(device, non_blocking=True)
+                is_noisy: Tensor = is_noisy.to(device)
+                y: Tensor = y.to(device)
 
-            assert mels.dim() == 4
-            mels = mels.reshape((cfg.N * cfg.M, mels.size(2), mels.size(3)))
+                assert mels.dim() == 4
+                mels = mels.reshape((cfg.N * cfg.M, mels.size(2), mels.size(3)))
 
-            optimizer.zero_grad()
+                optimizer.zero_grad()
 
-            with autocast():
-                embeddings = embedder_net(mels)
+                with autocast():
+                    embeddings = embedder_net(mels)
 
-                if cfg.loss == 'GE2E':
-                    criterion: GE2ELoss
-                    embeddings = embeddings.reshape((cfg.N, cfg.M, embeddings.size(1)))
-                    loss, prec1 = criterion(embeddings, y)
-                else:
-                    assert cfg.loss in ('AAM', 'AAMSC', 'CE')
-                    if cfg.loss != 'CE' and iterations == cfg.iterations // 8:
-                        criterion.easy_margin = False
-                    loss = criterion(embeddings, y.flatten())
-                    if isinstance(loss, tuple):
-                        loss, prec1 = loss
-                    loss: Tensor
+                    if cfg.loss == 'GE2E':
+                        criterion: GE2ELoss
+                        embeddings = embeddings.reshape((cfg.N, cfg.M, embeddings.size(1)))
+                        loss, _ = criterion(embeddings, y)
+                    else:
+                        assert cfg.loss in ('AAM', 'AAMSC', 'CE')
+                        if cfg.loss != 'CE' and total_iterations == cfg.iterations // 8:
+                            criterion.easy_margin = False
+                        loss = criterion(embeddings, y.flatten())
+                        if isinstance(loss, tuple):
+                            loss, _ = loss
 
-            scaler.scale(loss).backward()
-            scaler.unscale_(optimizer)
+                scaler.scale(loss).backward()
+                scaler.unscale_(optimizer)
 
-            torch.nn.utils.clip_grad_norm_(embedder_net.parameters(), 3.0)
-            torch.nn.utils.clip_grad_norm_(criterion.parameters(), 1.0)
-            scaler.step(optimizer)
-            scaler.update()
+                torch.nn.utils.clip_grad_norm_(embedder_net.parameters(), 3.0)
+                torch.nn.utils.clip_grad_norm_(criterion.parameters(), 1.0)
+                scaler.step(optimizer)
+                scaler.update()
 
-            total_loss += loss
-            iterations += 1
-            if iterations >= cfg.iterations:
-                break
+                total_loss += loss
 
-        if not debug:
-            wandb.log({
-                'Loss': total_loss / len(train_data_loader)
-            })
-            if iterations % save_interval == 0:
-                torch.save(embedder_net.state_dict(), checkpoint_dir / f'model-iter{iterations + 1}.pth')
-                torch.save(criterion.state_dict(), checkpoint_dir / f'loss-iter{iterations + 1}.pth')
+                progress_bar.update(1)
+                total_iterations += 1
+                local_iterations += 1
+                if total_iterations >= cfg.iterations:
+                    break
+
+            if not debug:
+                wandb.log({'Loss': total_loss / local_iterations})
+                if total_iterations % save_interval == 0:
+                    iteration_string = str(total_iterations).zfill(len(str(cfg.iterations)))
+                    torch.save(embedder_net.state_dict(), checkpoint_dir / f'model-{iteration_string}.pth')
+                    torch.save(criterion.state_dict(), checkpoint_dir / f'loss-{iteration_string}.pth')
 
     torch.save(embedder_net.state_dict(), checkpoint_dir / 'model-final.pth')
     torch.save(criterion.state_dict(), checkpoint_dir / 'loss-final.pth')
