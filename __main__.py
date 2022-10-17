@@ -71,6 +71,10 @@ train_parser.add_argument('-d', '--debug', action='store_true')
 
 test_parser = main_subparser.add_parser('test')
 test_parser.set_defaults(main_func=test_main)
+test_parser.add_argument('model_dir', type=Path)
+test_parser.add_argument('--selected-iterations', type=int, nargs='*')
+test_parser.add_argument('--vox1test-mel-spectrogram-dir', default=DEFAULT_VOX1TEST_MEL_SPECTROGRAM_DIR, type=Path)
+test_parser.add_argument('-d', '--debug', action='store_true')
 
 args = main_parser.parse_args()
 args.main_func(args)

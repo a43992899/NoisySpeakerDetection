@@ -1,7 +1,8 @@
 from pathlib import Path
+from typing import List, Optional
 
 from ..constant.config import TrainConfig
-from .train import train
+from .train import train, test
 
 
 def train_main(args):
@@ -53,4 +54,8 @@ def train_main(args):
 
 
 def test_main(args):
-    pass
+    model_dir: Path = args.model_dir
+    selected_iterations: Optional[List[int]] = args.selected_iterations
+    vox1test_mel_spectrogram_dir: Path = args.vox1test_mel_spectrogram_dir
+
+    test
