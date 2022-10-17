@@ -37,7 +37,7 @@ def train(
 
     checkpoint_dir = training_model_save_dir / cfg.description
     if not debug:
-        checkpoint_dir.mkdir()
+        checkpoint_dir.mkdir(exist_ok=True)
         cfg.to_json(checkpoint_dir / 'config.json')
         print(f'Checkpoints will be saved to `{checkpoint_dir}`')
 
