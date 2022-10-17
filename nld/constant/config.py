@@ -3,6 +3,11 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Tuple, Union, get_args
 
+import torch
+
+from ..model.loss import AAMSoftmax, GE2ELoss, SubcenterArcMarginProduct
+from ..model.model import SpeechEmbedder
+
 NoiseLevel = Literal[0, 20, 50, 75]
 NoiseType = Literal['Permute', 'Open', 'Mix']
 LossType = Literal['CE', 'GE2E', 'AAM', 'AAMSC']
@@ -58,6 +63,41 @@ class TrainConfig(BaseConfig):
 
     dataloader_num_workers: int
     random_seed: int
+
+    def forge_model(self, sample_num: int, num_classes: int):
+        return SpeechEmbedder(
+            sample_num,
+            self.model_lstm_hidden_size,
+            self.model_lstm_num_layers,
+            self.model_projection_size,
+            should_softmax=(self.loss == 'CE'),
+            num_classes=num_classes
+        )
+
+    def forge_criterion(self, utterance_classes_num: int):
+        if self.loss == 'CE':
+            self.assert_attr('N', 'M')
+            return torch.nn.NLLLoss()
+        elif self.loss == 'GE2E':
+            self.assert_attr('N', 'M')
+            return GE2ELoss()
+        elif self.loss == 'AAM':
+            self.assert_attr('N', 'M', 's', 'm')
+            print(f'At an early stage, easy_margin is enabled for AAM. '
+                f'easy_margin flag will be turned down after {self.iterations // 8} iterations.')
+            return AAMSoftmax(
+                self.model_projection_size, utterance_classes_num,
+                scale=self.s, margin=self.m, easy_margin=True
+            )
+        else:
+            assert self.loss == 'AAMSC'
+            self.assert_attr('N', 'M', 's', 'm', 'K')
+            print(f'At an early stage, easy_margin is enabled for AAMSC. '
+                f'easy_margin flag will be turned down after {self.iterations // 8} iterations.')
+            return SubcenterArcMarginProduct(
+                self.model_projection_size, utterance_classes_num,
+                s=self.s, m=self.m, K=self.K, easy_margin=True,
+            )
 
     def assert_attr(self, *attrs: str):
         for attr in attrs:

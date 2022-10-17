@@ -12,8 +12,8 @@ from torch.utils.data import Dataset
 
 class SpeakerDataset(Dataset):
     sample_num: int
-    vox1_mel_spectrogram_dir: Path
-    vox2_mel_spectrogram_dir: Path
+    noise_mel_spectrogram_dir: Optional[Path]
+    main_mel_spectrogram_dir: Path
 
     speaker_label_to_utterances: Dict[str, List[str]]
     speaker_label_to_id: Dict[str, int]
@@ -22,17 +22,17 @@ class SpeakerDataset(Dataset):
     mislabeled_mapping: Optional[Dict[str, str]]
 
     def __init__(
-        self, sample_num: int, vox1_mel_spectrogram_dir: Path,
-        vox2_mel_spectrogram_dir: Path, mislabeled_json_file: Optional[Path]
+        self, sample_num: int, noise_mel_spectrogram_dir: Optional[Path],
+        main_mel_spectrogram_dir: Path, mislabeled_json_file: Optional[Path]
     ) -> None:
         super().__init__()
 
         self.sample_num = sample_num
-        self.vox1_mel_spectrogram_dir = vox1_mel_spectrogram_dir
-        self.vox2_mel_spectrogram_dir = vox2_mel_spectrogram_dir
+        self.noise_mel_spectrogram_dir = noise_mel_spectrogram_dir
+        self.main_mel_spectrogram_dir = main_mel_spectrogram_dir
 
         self.speaker_label_to_utterances = dict()
-        for utterance_file in vox2_mel_spectrogram_dir.iterdir():
+        for utterance_file in main_mel_spectrogram_dir.iterdir():
             if not utterance_file.suffix == '.npy':
                 continue
             speaker_label = utterance_file.stem.split('-')[0]
@@ -41,7 +41,7 @@ class SpeakerDataset(Dataset):
             except KeyError:
                 self.speaker_label_to_utterances[speaker_label] = [utterance_file.name]
 
-        with open(vox2_mel_spectrogram_dir / 'speaker-label-to-id.json', 'r') as f:
+        with open(main_mel_spectrogram_dir / 'speaker-label-to-id.json', 'r') as f:
             self.speaker_label_to_id = json.load(f)
 
         assert len(self.speaker_label_to_utterances) == len(self.speaker_label_to_id)
@@ -61,7 +61,7 @@ class SpeakerDataset(Dataset):
             self.speaker_label_to_utterances[selected_speaker_label], self.sample_num
         )
         selected_speaker_mel_spectrogram_files_untainted = [
-            self.vox2_mel_spectrogram_dir / file
+            self.main_mel_spectrogram_dir / file
             for file in selected_speaker_mel_spectrogram_files
         ]
         selected_labels = [selected_speaker_label for _ in range(self.sample_num)]
@@ -73,12 +73,13 @@ class SpeakerDataset(Dataset):
                 selected_file_is_noisy[i] = True
                 mislabeled = self.mislabeled_mapping[vox2_selected_file]
                 if mislabeled.endswith('.npy'):
-                    selected_speaker_mel_spectrogram_files[i] = self.vox1_mel_spectrogram_dir / mislabeled
+                    assert self.noise_mel_spectrogram_dir is not None
+                    selected_speaker_mel_spectrogram_files[i] = self.noise_mel_spectrogram_dir / mislabeled
                 else:
                     selected_labels[i] = mislabeled
-                    selected_speaker_mel_spectrogram_files[i] = self.vox2_mel_spectrogram_dir / vox2_selected_file
+                    selected_speaker_mel_spectrogram_files[i] = self.main_mel_spectrogram_dir / vox2_selected_file
             else:
-                selected_speaker_mel_spectrogram_files[i] = self.vox2_mel_spectrogram_dir / vox2_selected_file
+                selected_speaker_mel_spectrogram_files[i] = self.main_mel_spectrogram_dir / vox2_selected_file
 
         selected_id = [self.speaker_label_to_id[label] for label in selected_labels]
 

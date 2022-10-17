@@ -14,10 +14,8 @@ from tqdm import tqdm
 
 from ..constant.config import DataConfig, TrainConfig
 from ..constant.entities import WANDB_ENTITY, WANDB_TRAINING_PROJECT_NAME
-from ..model.loss import AAMSoftmax, GE2ELoss, SubcenterArcMarginProduct
-from ..model.model import SpeechEmbedder
 from ..process_data.dataset import SpeakerDataset
-from ..utils import current_utc_time, set_random_seed_to
+from ..utils import set_random_seed_to
 
 
 def train(
@@ -45,41 +43,10 @@ def train(
     with open(spkr2id_file, 'r') as f:
         speaker_label_to_id: Dict[str, int] = json.load(f)
     utterance_classes_num = len(speaker_label_to_id)
-
     data_processing_config = DataConfig.from_json(vox2_mel_spectrogram_dir / 'data-processing-config.json')
 
-    embedder_net = SpeechEmbedder(
-        data_processing_config.nmels,
-        cfg.model_lstm_hidden_size,
-        cfg.model_lstm_num_layers,
-        cfg.model_projection_size,
-        should_softmax=(cfg.loss == 'CE'),
-        num_classes=utterance_classes_num
-    ).to(device)
-
-    if cfg.loss == 'CE':
-        cfg.assert_attr('N', 'M')
-        criterion = torch.nn.NLLLoss()
-    elif cfg.loss == 'GE2E':
-        cfg.assert_attr('N', 'M')
-        criterion = GE2ELoss()
-    elif cfg.loss == 'AAM':
-        cfg.assert_attr('N', 'M', 's', 'm')
-        print(f'At an early stage, easy_margin is enabled for AAM. '
-              f'easy_margin flag will be turned down after {cfg.iterations // 8} iterations.')
-        criterion = AAMSoftmax(
-            cfg.model_projection_size, utterance_classes_num,
-            scale=cfg.s, margin=cfg.m, easy_margin=True
-        )
-    else:
-        assert cfg.loss == 'AAMSC'
-        cfg.assert_attr('N', 'M', 's', 'm', 'K')
-        print(f'At an early stage, easy_margin is enabled for AAMSC. '
-              f'easy_margin flag will be turned down after {cfg.iterations // 8} iterations.')
-        criterion = SubcenterArcMarginProduct(
-            cfg.model_projection_size, utterance_classes_num,
-            s=cfg.s, m=cfg.m, K=cfg.K, easy_margin=True,
-        )
+    embedder_net = cfg.forge_model(data_processing_config.nmels, utterance_classes_num).to(device)
+    criterion = cfg.forge_criterion(utterance_classes_num)
     criterion.to(device)
 
     train_dataset = SpeakerDataset(cfg.M, vox1_mel_spectrogram_dir, vox2_mel_spectrogram_dir, mislabeled_json_file)
@@ -142,7 +109,6 @@ def train(
                     embeddings = embedder_net(mels)
 
                     if cfg.loss == 'GE2E':
-                        criterion: GE2ELoss
                         embeddings = embeddings.reshape((cfg.N, cfg.M, embeddings.size(1)))
                         loss, _ = criterion(embeddings, y)
                     else:
