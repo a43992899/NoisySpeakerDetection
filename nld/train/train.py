@@ -13,7 +13,7 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from ..constant.config import DataConfig, TrainConfig
-from ..constant.entities import WANDB_ENTITY, WANDB_PROJECT
+from ..constant.entities import WANDB_ENTITY, WANDB_TRAINING_PROJECT_NAME
 from ..model.loss import AAMSoftmax, GE2ELoss, SubcenterArcMarginProduct
 from ..model.model import SpeechEmbedder
 from ..process_data.dataset import SpeakerDataset
@@ -30,7 +30,7 @@ def train(
 
     if not debug:
         wandb.init(
-            project=WANDB_PROJECT,
+            project=WANDB_TRAINING_PROJECT_NAME,
             entity=WANDB_ENTITY,
             config=cfg.to_dict(),
             name=job_name
