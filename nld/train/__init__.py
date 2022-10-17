@@ -60,11 +60,15 @@ def test_main(args):
     vox1test_mel_spectrogram_dir: Path = args.vox1test_mel_spectrogram_dir
     debug: bool = args.debug
 
+    if args.M % 2 != 0:
+        raise ValueError()
+
     test_config = TestConfig(
         N=args.N,
         M=args.M,
         epochs=args.epochs,
         dataloader_num_workers=args.dataloader_num_workers,
+        random_seed=args.random_seed
     )
 
     if selected_iterations is None:

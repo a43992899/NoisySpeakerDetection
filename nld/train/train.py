@@ -1,12 +1,10 @@
 import json
 from pathlib import Path
-from typing import List, Optional
+from typing import List
 
+import numpy as np
 import torch
 import wandb
-from scipy.interpolate import interp1d
-from scipy.optimize import brentq
-from sklearn.metrics import roc_curve
 from torch import Tensor
 from torch.cuda import is_available as cuda_is_available
 from torch.cuda.amp import GradScaler, autocast
@@ -16,8 +14,8 @@ from tqdm import tqdm
 from ..constant.config import DataConfig, TestConfig, TrainConfig
 from ..constant.entities import (WANDB_ENTITY, WANDB_TESTING_PROJECT_NAME,
                                  WANDB_TRAINING_PROJECT_NAME)
-from ..process_data.dataset import SpeakerDataset
-from ..utils import clean_memory, set_random_seed_to, compute_eer
+from ..process_data.dataset import VOX2_CLASS_NUM, SpeakerDataset
+from ..utils import clean_memory, compute_eer, set_random_seed_to
 
 
 def train(
@@ -146,17 +144,20 @@ def train(
 
 def test(
     test_config: TestConfig, model_dir: Path,
-    selected_iterations: Optional[List[str]], vox1test_mel_spectrogram_dir: Path, debug: bool,
+    selected_iterations: List[str], vox1test_mel_spectrogram_dir: Path, debug: bool,
 ):
     device = torch.device('cuda' if cuda_is_available() else 'cpu')
     training_config = TrainConfig.from_json(model_dir / 'config.json')
-    set_random_seed_to(training_config.random_seed)
+    set_random_seed_to(
+        test_config.random_seed if test_config.random_seed is not None
+        else training_config.random_seed
+    )
 
     models = list(map(lambda i: model_dir / f'model-{i}.pth', selected_iterations))
 
     data_processing_config = DataConfig.from_json(vox1test_mel_spectrogram_dir / 'data-processing-config.json')
 
-    embedder_net = training_config.forge_model(data_processing_config.nmels).to(device).eval()
+    embedder_net = training_config.forge_model(data_processing_config.nmels, VOX2_CLASS_NUM).to(device).eval()
     test_dataset = SpeakerDataset(test_config.M, None, vox1test_mel_spectrogram_dir, None)
     test_data_loader = DataLoader(
         test_dataset,
@@ -207,117 +208,28 @@ def test(
                 )
 
                 enrollment_centroids = torch.mean(enrollment_embeddings, dim=1)
-                verification_embeddings = torch.cat(
-                    [verification_embeddings[:, 0], verification_embeddings[:, 1], verification_embeddings[:, 2]]
-                )
+                verification_embeddings = verification_embeddings.reshape((-1, verification_embeddings.size(-1)))
 
                 verification_embeddings_norm: Tensor = \
                     verification_embeddings / torch.norm(verification_embeddings, dim=1).unsqueeze(-1)
-                # enrollment_embeddings = torch.cat([enrollment_centroids])
-                enrollment_embeddings_norm: Tensor = \
-                    enrollment_embeddings / torch.norm(enrollment_centroids, dim=1).unsqueeze(-1)
+                enrollment_centroids_norm: Tensor = \
+                    enrollment_centroids / torch.norm(enrollment_centroids, dim=1).unsqueeze(-1)
 
-                similarity_matrix = verification_embeddings_norm @ enrollment_embeddings_norm.transpose(-1, -2)
-                ground_truth = torch.ones(similarity_matrix.size()) * -1
+                similarity_matrix = verification_embeddings_norm @ enrollment_centroids_norm.transpose(-1, -2)
+                ground_truth = torch.zeros(similarity_matrix.size())
                 for i in range(ground_truth.size(0)):
                     ground_truth[i, i % test_config.N] = 1
 
-                similarity_matrices.append(similarity_matrix)
-                labels.append(ground_truth)
+                similarity_matrices.append(similarity_matrix.flatten().detach().cpu().numpy())
+                labels.append(ground_truth.flatten().detach().cpu().numpy())
 
             eer, thresh = compute_eer(
-                torch.cat(similarity_matrices).detach().cpu().numpy(),
-                torch.cat(labels).detach().cpu().numpy()
+                np.concatenate(similarity_matrices),
+                np.concatenate(labels),
             )
 
             if not debug:
-                wandb.log({
-                    'Equal Error Rate': eer,
-                    'Threshold': thresh
-                })
+                wandb.log({'Equal Error Rate': eer, 'Threshold': thresh})
 
         if not debug:
             wandb.finish()
-
-
-# def test_one(hp: Config):
-#     try:
-#         embedder_net = SpeechEmbedder(hp).to(device)
-#         embedder_net.load_state_dict(torch.load(model_path))
-#     except BaseException:
-#         embedder_net = SpeechEmbedder_Softmax(
-#             hp=hp, num_classes=5994).to(device)
-#         embedder_net.load_state_dict(torch.load(model_path))
-#     embedder_net.eval()
-
-#     model_parameters = filter(lambda p: p.requires_grad, embedder_net.parameters())
-#     num_params = sum([np.prod(p.size()) for p in model_parameters])
-#     print("Number of params: ", num_params)
-
-#     ypreds = []
-#     ylabels = []
-
-#     for _ in range(hp.test.epochs):
-#         for batch_id, (mel_db_batch, labels, is_noisy, utterance_ids) in enumerate(tqdm(test_loader)):
-#             assert hp.test.M % 2 == 0
-
-#             utterance_ids = np.array(utterance_ids).T
-#             mel_db_batch = mel_db_batch.to(device)
-#             enrollment_batch, verification_batch = torch.split(
-#                 mel_db_batch, int(mel_db_batch.size(1) / 2), dim=1)
-#             enrollment_batch = torch.reshape(
-#                 enrollment_batch,
-#                 (hp.test.N * hp.test.M // 2,
-#                  enrollment_batch.size(2),
-#                  enrollment_batch.size(3)))
-#             verification_batch = torch.reshape(
-#                 verification_batch,
-#                 (hp.test.N * hp.test.M // 2,
-#                  verification_batch.size(2),
-#                  verification_batch.size(3)))
-
-#             perm = torch.randperm(verification_batch.size(0))
-#             unperm = torch.argsort(perm)
-
-#             verification_batch = verification_batch[perm]
-#             # get embedder_net attribute
-#             if embedder_net.__class__.__name__ == 'SpeechEmbedder_Softmax':
-#                 enrollment_embeddings = embedder_net.get_embedding(
-#                     enrollment_batch)
-#                 verification_embeddings = embedder_net.get_embedding(
-#                     verification_batch)
-#             else:
-#                 enrollment_embeddings = embedder_net(enrollment_batch)
-#                 verification_embeddings = embedder_net(verification_batch)
-
-#             verification_embeddings = verification_embeddings[unperm]
-
-#             enrollment_embeddings = torch.reshape(
-#                 enrollment_embeddings,
-#                 (hp.test.N,
-#                  hp.test.M // 2,
-#                  enrollment_embeddings.size(1)))
-#             verification_embeddings = torch.reshape(
-#                 verification_embeddings,
-#                 (hp.test.N,
-#                  hp.test.M // 2,
-#                  verification_embeddings.size(1)))
-
-#             enrollment_centroids = get_centroids(enrollment_embeddings)
-#             veri_embed = torch.cat(
-#                 [verification_embeddings[:, 0], verification_embeddings[:, 1], verification_embeddings[:, 2]])
-
-#             veri_embed_norm = veri_embed / torch.norm(veri_embed, dim=1).unsqueeze(-1)
-#             enrl_embed = torch.cat([enrollment_centroids] * 1)
-#             enrl_embed_norm = enrl_embed / torch.norm(enrl_embed, dim=1).unsqueeze(-1)
-#             sim_mat = torch.matmul(veri_embed_norm, enrl_embed_norm.transpose(-1, -2)).data.cpu().numpy()
-#             truth = torch.ones_like(sim_mat) * (-1)
-#             for i in range(truth.shape[0]):
-#                 truth[i, i % 10] = 1
-#             ypreds.append(sim_mat.flatten())
-#             ylabels.append(truth.flatten())
-
-#         eer, thresh = compute_eer(ypreds, ylabels)
-#         print("eer:", eer, "threshold:", thresh)
-#     print(model_path, 'eval done.')
-#     return eer, thresh

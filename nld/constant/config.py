@@ -1,13 +1,12 @@
 import json
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Literal, Tuple, Union, get_args
+from typing import Any, Dict, List, Literal, Optional, Tuple, Union, get_args
 
 import torch
 
 from ..model.loss import AAMSoftmax, GE2ELoss, SubcenterArcMarginProduct
 from ..model.model import SpeechEmbedder
-from ..process_data.dataset import VOX2_CLASS_NUM
 
 NoiseLevel = Literal[0, 20, 50, 75]
 NoiseType = Literal['Permute', 'Open', 'Mix']
@@ -65,7 +64,7 @@ class TrainConfig(BaseConfig):
     dataloader_num_workers: int
     random_seed: int
 
-    def forge_model(self, lstm_input_size: int, num_classes: int = VOX2_CLASS_NUM) -> SpeechEmbedder:
+    def forge_model(self, lstm_input_size: int, num_classes: int) -> SpeechEmbedder:
         return SpeechEmbedder(
             lstm_input_size,
             self.model_lstm_hidden_size,
@@ -149,3 +148,5 @@ class TestConfig(BaseConfig):
 
     N: int
     M: int
+
+    random_seed: Optional[int]

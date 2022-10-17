@@ -11,10 +11,6 @@
       "args": [
         "test",
         "data/training-models/clean-CE-bs256-seed0",
-        "10",
-        "6",
-        "300",
-        "1",
         "--selected-iterations",
         "final",
         "--debug"

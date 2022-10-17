@@ -1,5 +1,4 @@
 import json
-import os
 import random
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Tuple
@@ -52,6 +51,8 @@ class SpeakerDataset(Dataset):
         if mislabeled_json_file is not None:
             with open(mislabeled_json_file, 'r') as f:
                 self.mislabeled_mapping = json.load(f)
+        else:
+            self.mislabeled_mapping = None
 
     def __len__(self):
         return len(self.speaker_labels)

@@ -109,7 +109,8 @@ def get_centroid(embeddings, speaker_id, utterance_id):
 
 def get_cossim(embeddings, centroids, cos):
     """compute cosine similarity matrix among all (utter_emb, centroid) pairs
-    when calculating cossim between an utter_emb with self-centroid, we need to recompute self-centroid by excluding the utterance
+    when calculating cossim between an utter_emb with self-centroid, 
+    we need to recompute self-centroid by excluding the utterance
     embeddings: [N, M, emb_size]
     centroids: [N, emb_size]
     cos: cosine similarity
@@ -146,7 +147,6 @@ def normalize_0_1(values, max_value, min_value):
 
 def compute_eer(predictions: npt.NDArray, labels: npt.NDArray):
     fpr, tpr, thresholds = roc_curve(labels, predictions, pos_label=1)
-
     eer = brentq(lambda x: 1. - x - interp1d(fpr, tpr)(x), 0., 1.)
     thresh = interp1d(fpr, thresholds)(eer)
     return eer, thresh
