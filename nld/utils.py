@@ -11,7 +11,6 @@ import torch.autograd as grad
 from scipy.interpolate import interp1d
 from scipy.optimize import brentq
 from sklearn.metrics import roc_curve
-from torch import Tensor
 from torch.cuda import empty_cache as empty_cuda_cache
 from torch.cuda import is_available as cuda_is_available
 
@@ -82,16 +81,6 @@ def accuracy(output, target, topk=(1,)):
         correct_k = correct[:k].view(-1).float().sum(0, keepdim=True)
         res.append(correct_k.mul_(100.0 / batch_size))
     return res
-
-
-def get_centroids(embeddings: Tensor):
-    """
-    embeddings: [N, M, emb_size]
-    N speakers, M utterances per speaker
-
-    Returns: [N, emb_size]
-    """
-    return torch.mean(embeddings, dim=1)
 
 
 def get_centroid(embeddings, speaker_id, utterance_id):
