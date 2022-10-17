@@ -1,17 +1,25 @@
+import gc
 import os
-from pathlib import Path
 import random
 from datetime import datetime, timezone
 from typing import Generator, List
 
-import librosa
 import numpy as np
+import numpy.typing as npt
 import torch
 import torch.autograd as grad
 from scipy.interpolate import interp1d
 from scipy.optimize import brentq
 from sklearn.metrics import roc_curve
 from torch import Tensor
+from torch.cuda import empty_cache as empty_cuda_cache
+from torch.cuda import is_available as cuda_is_available
+
+
+def clean_memory():
+    gc.collect()
+    if cuda_is_available():
+        empty_cuda_cache()
 
 
 def set_random_seed_to(seed: int = 1):
@@ -135,41 +143,9 @@ def normalize_0_1(values, max_value, min_value):
     normalized = np.clip((values - min_value) / (max_value - min_value), 0, 1)
     return normalized
 
-# TODO: unused function? Also, having reference to not existed `hp` variable?
-# def mfccs_and_spec(wav_file, wav_process=False, calc_mfccs=False, calc_mag_db=False):
-#     sound_file, _ = librosa.core.load(wav_file, sr=hp.data.sr)
-#     window_length = int(hp.data.window * hp.data.sr)
-#     hop_length = int(hp.data.hop * hp.data.sr)
-#     duration = hp.data.tisv_frame * hp.data.hop + hp.data.window
 
-#     # Cut silence and fix length
-#     if wav_process:
-#         sound_file, index = librosa.effects.trim(sound_file, frame_length=window_length, hop_length=hop_length)
-#         length = int(hp.data.sr * duration)
-#         sound_file = librosa.util.fix_length(sound_file, length)
-
-#     spec = librosa.stft(sound_file, n_fft=hp.data.nfft, hop_length=hop_length, win_length=window_length)
-#     mag_spec = np.abs(spec)
-
-#     mel_basis = librosa.filters.mel(hp.data.sr, hp.data.nfft, n_mels=hp.data.nmels)
-#     mel_spec = np.dot(mel_basis, mag_spec)
-
-#     mag_db = librosa.amplitude_to_db(mag_spec)
-#     # db mel spectrogram
-#     mel_db = librosa.amplitude_to_db(mel_spec).T
-
-#     mfccs = None
-#     if calc_mfccs:
-#         mfccs = np.dot(librosa.filters.dct(40, mel_db.shape[0]), mel_db).T
-
-#     return mfccs, mel_db, mag_db
-
-
-def compute_eer(ypreds, ylabels):
-    ypreds = np.concatenate(ypreds)
-    ylabels = np.concatenate(ylabels)
-
-    fpr, tpr, thresholds = roc_curve(ylabels, ypreds, pos_label=1)
+def compute_eer(predictions: npt.NDArray, labels: npt.NDArray):
+    fpr, tpr, thresholds = roc_curve(labels, predictions, pos_label=1)
 
     eer = brentq(lambda x: 1. - x - interp1d(fpr, tpr)(x), 0., 1.)
     thresh = interp1d(fpr, thresholds)(eer)

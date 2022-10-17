@@ -1,7 +1,7 @@
 from pathlib import Path
 from typing import List, Optional
 
-from ..constant.config import TrainConfig
+from ..constant.config import TestConfig, TrainConfig
 from .train import train, test
 
 
@@ -55,7 +55,23 @@ def train_main(args):
 
 def test_main(args):
     model_dir: Path = args.model_dir
-    selected_iterations: Optional[List[int]] = args.selected_iterations
+    selected_iterations: Optional[List[str]] = args.selected_iterations
+    stride: int = args.stride
     vox1test_mel_spectrogram_dir: Path = args.vox1test_mel_spectrogram_dir
+    debug: bool = args.debug
 
-    test
+    test_config = TestConfig(
+        N=args.N,
+        M=args.M,
+        epochs=args.epochs,
+        dataloader_num_workers=args.dataloader_num_workers,
+    )
+
+    if selected_iterations is None:
+        selected_iterations = sorted(map(
+            lambda s: s.stem.split('-')[-1],
+            filter(lambda p: p.stem.startswith('model'), model_dir.iterdir())
+        ), reverse=True)
+        selected_iterations = selected_iterations[0:len(selected_iterations) // 2:stride]
+
+    test(test_config, model_dir, selected_iterations, vox1test_mel_spectrogram_dir, debug)

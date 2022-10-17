@@ -54,16 +54,3 @@ class SpeechEmbedder(nn.Module):
         x = self.projection(x.float())
         x = x / torch.norm(x, dim=-1).unsqueeze(1)
         return x
-
-    # def get_confidence(self, x: Tensor) -> Tensor:
-    #     if not self.should_softmax:
-    #         raise ValueError()
-    #     assert self.projection2 is not None
-    #     assert self.bn1 is not None
-    #     assert self.softmax is not None
-
-    #     x = self.projection2(x.float())
-    #     x = self.bn1(x)
-    #     # x = F.softmax(x)  # TODO: logsoftmax or softmax?
-    #     x = self.softmax(x)
-    #     return x

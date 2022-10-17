@@ -2,6 +2,25 @@
   "version": "0.2.0",
   "configurations": [
     {
+      "name": "Testing",
+      "type": "python",
+      "request": "launch",
+      "program": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "justMyCode": true,
+      "args": [
+        "test",
+        "data/training-models/clean-CE-bs256-seed0",
+        "10",
+        "6",
+        "300",
+        "1",
+        "--selected-iterations",
+        "final",
+        "--debug"
+      ]
+    },
+    {
       "name": "Training Debug",
       "type": "python",
       "request": "launch",

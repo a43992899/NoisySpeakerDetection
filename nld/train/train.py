@@ -1,21 +1,23 @@
-import gc
 import json
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import List, Optional
 
 import torch
 import wandb
+from scipy.interpolate import interp1d
+from scipy.optimize import brentq
+from sklearn.metrics import roc_curve
 from torch import Tensor
-from torch.cuda import empty_cache as empty_cuda_cache
 from torch.cuda import is_available as cuda_is_available
 from torch.cuda.amp import GradScaler, autocast
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from ..constant.config import DataConfig, TrainConfig
-from ..constant.entities import WANDB_ENTITY, WANDB_TRAINING_PROJECT_NAME
+from ..constant.config import DataConfig, TestConfig, TrainConfig
+from ..constant.entities import (WANDB_ENTITY, WANDB_TESTING_PROJECT_NAME,
+                                 WANDB_TRAINING_PROJECT_NAME)
 from ..process_data.dataset import SpeakerDataset
-from ..utils import set_random_seed_to
+from ..utils import clean_memory, set_random_seed_to, compute_eer
 
 
 def train(
@@ -39,26 +41,23 @@ def train(
         cfg.to_json(checkpoint_dir / 'config.json')
         print(f'Checkpoints will be saved to `{checkpoint_dir}`')
 
-    spkr2id_file = vox2_mel_spectrogram_dir / 'speaker-label-to-id.json'
-    with open(spkr2id_file, 'r') as f:
-        speaker_label_to_id: Dict[str, int] = json.load(f)
-    utterance_classes_num = len(speaker_label_to_id)
+    with open(vox2_mel_spectrogram_dir / 'speaker-label-to-id.json', 'r') as f:
+        utterance_classes_num = len(json.load(f))
     data_processing_config = DataConfig.from_json(vox2_mel_spectrogram_dir / 'data-processing-config.json')
 
     embedder_net = cfg.forge_model(data_processing_config.nmels, utterance_classes_num).to(device)
-    criterion = cfg.forge_criterion(utterance_classes_num)
-    criterion.to(device)
+    criterion = cfg.forge_criterion(utterance_classes_num).to(device)
 
     train_dataset = SpeakerDataset(cfg.M, vox1_mel_spectrogram_dir, vox2_mel_spectrogram_dir, mislabeled_json_file)
     train_data_loader = DataLoader(
         train_dataset,
         # Note that the real batch size = N * M
         batch_size=cfg.N,
-        shuffle=True,
         num_workers=cfg.dataloader_num_workers,
+        collate_fn=train_dataset.collate_fn,
+        shuffle=True,
         drop_last=True,
         pin_memory=True,
-        collate_fn=train_dataset.collate_fn
     )
 
     if cfg.optimizer == 'Adam':
@@ -81,15 +80,12 @@ def train(
         if len(missing_keys) != 0 or len(unexpected_keys) != 0:
             raise ValueError()
 
-    gc.collect()
-    if cuda_is_available():
-        empty_cuda_cache()
-
     if not debug:
         wandb.watch(embedder_net, criterion)
 
     embedder_net.train()
     total_iterations = 0
+    clean_memory()
     with tqdm(total=cfg.iterations) as progress_bar:
         while total_iterations < cfg.iterations:
             total_loss = 0.0
@@ -148,23 +144,103 @@ def train(
         wandb.finish()
 
 
+def test(
+    test_config: TestConfig, model_dir: Path,
+    selected_iterations: Optional[List[str]], vox1test_mel_spectrogram_dir: Path, debug: bool,
+):
+    device = torch.device('cuda' if cuda_is_available() else 'cpu')
+    training_config = TrainConfig.from_json(model_dir / 'config.json')
+    set_random_seed_to(training_config.random_seed)
+
+    models = list(map(lambda i: model_dir / f'model-{i}.pth', selected_iterations))
+
+    data_processing_config = DataConfig.from_json(vox1test_mel_spectrogram_dir / 'data-processing-config.json')
+
+    embedder_net = training_config.forge_model(data_processing_config.nmels).to(device).eval()
+    test_dataset = SpeakerDataset(test_config.M, None, vox1test_mel_spectrogram_dir, None)
+    test_data_loader = DataLoader(
+        test_dataset,
+        batch_size=test_config.N,
+        num_workers=test_config.dataloader_num_workers,
+        collate_fn=test_dataset.collate_fn,
+        shuffle=True,
+        drop_last=True,
+        pin_memory=True,
+    )
+
+    for iteration, model in zip(selected_iterations, models):
+        missing_keys, unexpected_keys = embedder_net.load_state_dict(torch.load(model))
+        if len(missing_keys) != 0 or len(unexpected_keys) != 0:
+            raise ValueError()
+
+        if not debug:
+            wandb.init(
+                project=WANDB_TESTING_PROJECT_NAME,
+                entity=WANDB_ENTITY,
+                config=test_config.to_dict(),
+                name=f'{training_config.description}-{iteration}',
+                reinit=True,
+            )
+
+        similarity_matrices = []
+        labels = []
+        for _ in tqdm(range(test_config.epochs), desc=f'Testing {iteration = }...'):
+            for mels, _, _, _, _ in test_data_loader:
+                mels: Tensor = mels.to(device)
+
+                enrollment_batch, verification_batch = mels.split(int(mels.size(1) / 2), dim=1)
+                enrollment_batch = enrollment_batch.reshape(
+                    (test_config.N * test_config.M // 2, enrollment_batch.size(2), enrollment_batch.size(3))
+                )
+                verification_batch = verification_batch.reshape(
+                    (test_config.N * test_config.M // 2, verification_batch.size(2), verification_batch.size(3))
+                )
+
+                enrollment_embeddings = embedder_net.get_embedding(enrollment_batch)
+                verification_embeddings = embedder_net.get_embedding(verification_batch)
+
+                enrollment_embeddings = enrollment_embeddings.reshape(
+                    (test_config.N, test_config.M // 2, enrollment_embeddings.size(1))
+                )
+                verification_embeddings = verification_embeddings.reshape(
+                    (test_config.N, test_config.M // 2, verification_embeddings.size(1))
+                )
+
+                enrollment_centroids = torch.mean(enrollment_embeddings, dim=1)
+                verification_embeddings = torch.cat(
+                    [verification_embeddings[:, 0], verification_embeddings[:, 1], verification_embeddings[:, 2]]
+                )
+
+                verification_embeddings_norm: Tensor = \
+                    verification_embeddings / torch.norm(verification_embeddings, dim=1).unsqueeze(-1)
+                # enrollment_embeddings = torch.cat([enrollment_centroids])
+                enrollment_embeddings_norm: Tensor = \
+                    enrollment_embeddings / torch.norm(enrollment_centroids, dim=1).unsqueeze(-1)
+
+                similarity_matrix = verification_embeddings_norm @ enrollment_embeddings_norm.transpose(-1, -2)
+                ground_truth = torch.ones(similarity_matrix.size()) * -1
+                for i in range(ground_truth.size(0)):
+                    ground_truth[i, i % test_config.N] = 1
+
+                similarity_matrices.append(similarity_matrix)
+                labels.append(ground_truth)
+
+            eer, thresh = compute_eer(
+                torch.cat(similarity_matrices).detach().cpu().numpy(),
+                torch.cat(labels).detach().cpu().numpy()
+            )
+
+            if not debug:
+                wandb.log({
+                    'Equal Error Rate': eer,
+                    'Threshold': thresh
+                })
+
+        if not debug:
+            wandb.finish()
+
+
 # def test_one(hp: Config):
-#     model_path = hp.test.model_path
-#     print(model_path)
-#     device = torch.device(hp.device)
-#     random.seed(0)
-#     torch.manual_seed(0)
-#     torch.cuda.manual_seed_all(0)
-
-#     test_dataset = SpeakerDatasetPreprocessed(hp)
-
-#     test_loader = DataLoader(
-#         test_dataset,
-#         batch_size=hp.test.N,
-#         shuffle=True,
-#         num_workers=hp.test.num_workers,
-#         drop_last=True)
-
 #     try:
 #         embedder_net = SpeechEmbedder(hp).to(device)
 #         embedder_net.load_state_dict(torch.load(model_path))
@@ -231,14 +307,11 @@ def train(
 #             veri_embed = torch.cat(
 #                 [verification_embeddings[:, 0], verification_embeddings[:, 1], verification_embeddings[:, 2]])
 
-#             veri_embed_norm = veri_embed / \
-#                 torch.norm(veri_embed, dim=1).unsqueeze(-1)
+#             veri_embed_norm = veri_embed / torch.norm(veri_embed, dim=1).unsqueeze(-1)
 #             enrl_embed = torch.cat([enrollment_centroids] * 1)
-#             enrl_embed_norm = enrl_embed / \
-#                 torch.norm(enrl_embed, dim=1).unsqueeze(-1)
-#             sim_mat = torch.matmul(
-#                 veri_embed_norm, enrl_embed_norm.transpose(-1, -2)).data.cpu().numpy()
-#             truth = np.ones_like(sim_mat) * (-1)
+#             enrl_embed_norm = enrl_embed / torch.norm(enrl_embed, dim=1).unsqueeze(-1)
+#             sim_mat = torch.matmul(veri_embed_norm, enrl_embed_norm.transpose(-1, -2)).data.cpu().numpy()
+#             truth = torch.ones_like(sim_mat) * (-1)
 #             for i in range(truth.shape[0]):
 #                 truth[i, i % 10] = 1
 #             ypreds.append(sim_mat.flatten())
@@ -248,61 +321,3 @@ def train(
 #         print("eer:", eer, "threshold:", thresh)
 #     print(model_path, 'eval done.')
 #     return eer, thresh
-
-
-def test(model_dir: Path, selected_iterations: Optional[List[int]], vox1_mel_spectrogram_dir: Path):
-    config = TrainConfig.from_json(model_dir / 'config.json')
-
-    if selected_iterations is None:
-        pass
-    else:
-        pass
-
-
-    if os.path.isfile(hp.test.model_path):
-        test_one(hp)
-    elif os.path.isdir(hp.test.model_path):
-        if not os.path.exists(csv_path):
-            csv_header_line = 'ModelPath,EER(%),Threshold(%)\n'
-            write_to_csv(csv_path, csv_header_line)
-            tested_model_paths = []
-        else:
-            # read csv, get the model paths
-            csv_file = open(csv_path, 'r')
-            csv_lines = csv_file.readlines()
-            csv_file.close()
-            tested_model_paths = [line.split(',')[0] for line in csv_lines[1:]]
-
-        pth_list = sorted(get_all_file_with_ext(hp.test.model_path, '.pth'))
-        for file in pth_list:
-            if 'ckpt_criterion_epoch' in file or file in tested_model_paths:
-                continue
-            else:
-                file_to_test = None
-                if '/GE2E/' in file:
-                    if isTarget(
-                        file,
-                        target_strings=[
-                            'ckpt_epoch_100.pth',
-                            'ckpt_epoch_200.pth',
-                            'ckpt_epoch_300.pth',
-                            'ckpt_epoch_400.pth',
-                            'ckpt_epoch_800.pth']):
-                        file_to_test = file
-                    else:
-                        continue
-                elif isTarget(file, target_strings=['/Softmax/', '/AAM/', '/AAMSC/']):
-                    if 'bs128' in file and 'ckpt_epoch_1600.pth' in file:
-                        file_to_test = file
-                    elif 'bs256' in file and 'ckpt_epoch_3200.pth' in file:
-                        file_to_test = file
-                    else:
-                        continue
-                else:
-                    continue
-                eer, thresh = test_one(file_to_test)
-                csv_line = f"{file_to_test},{eer*100},{thresh*100}\n"
-                write_to_csv(csv_path, csv_line)
-
-    else:
-        print("model_path is not a file or a directory")

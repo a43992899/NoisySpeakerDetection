@@ -9,6 +9,8 @@ import torch
 from torch import Tensor
 from torch.utils.data import Dataset
 
+VOX2_CLASS_NUM = 5994
+
 
 class SpeakerDataset(Dataset):
     sample_num: int

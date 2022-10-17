@@ -7,6 +7,7 @@ import torch
 
 from ..model.loss import AAMSoftmax, GE2ELoss, SubcenterArcMarginProduct
 from ..model.model import SpeechEmbedder
+from ..process_data.dataset import VOX2_CLASS_NUM
 
 NoiseLevel = Literal[0, 20, 50, 75]
 NoiseType = Literal['Permute', 'Open', 'Mix']
@@ -64,9 +65,9 @@ class TrainConfig(BaseConfig):
     dataloader_num_workers: int
     random_seed: int
 
-    def forge_model(self, sample_num: int, num_classes: int):
+    def forge_model(self, lstm_input_size: int, num_classes: int = VOX2_CLASS_NUM) -> SpeechEmbedder:
         return SpeechEmbedder(
-            sample_num,
+            lstm_input_size,
             self.model_lstm_hidden_size,
             self.model_lstm_num_layers,
             self.model_projection_size,
@@ -84,7 +85,7 @@ class TrainConfig(BaseConfig):
         elif self.loss == 'AAM':
             self.assert_attr('N', 'M', 's', 'm')
             print(f'At an early stage, easy_margin is enabled for AAM. '
-                f'easy_margin flag will be turned down after {self.iterations // 8} iterations.')
+                  f'easy_margin flag will be turned down after {self.iterations // 8} iterations.')
             return AAMSoftmax(
                 self.model_projection_size, utterance_classes_num,
                 scale=self.s, margin=self.m, easy_margin=True
@@ -93,7 +94,7 @@ class TrainConfig(BaseConfig):
             assert self.loss == 'AAMSC'
             self.assert_attr('N', 'M', 's', 'm', 'K')
             print(f'At an early stage, easy_margin is enabled for AAMSC. '
-                f'easy_margin flag will be turned down after {self.iterations // 8} iterations.')
+                  f'easy_margin flag will be turned down after {self.iterations // 8} iterations.')
             return SubcenterArcMarginProduct(
                 self.model_projection_size, utterance_classes_num,
                 s=self.s, m=self.m, K=self.K, easy_margin=True,
@@ -139,3 +140,12 @@ class DataConfig(BaseConfig):
     nmels: int
     tisv_frame: int
     silence_threshold: float
+
+
+@dataclass
+class TestConfig(BaseConfig):
+    epochs: int
+    dataloader_num_workers: int
+
+    N: int
+    M: int
