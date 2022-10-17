@@ -1,4 +1,4 @@
-stage: nld # [train, test, nld]
+stage: test # [train, test, nld]
 device: "cuda"
 ---
 data:
