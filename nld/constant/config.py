@@ -76,15 +76,14 @@ class TrainConfig(BaseConfig):
         s.append(self.loss)
         s.append(f'bs{self.N * self.M}')
 
-        if self.loss == 'CE':
-            pass
-        elif self.loss == 'GE2E':
-            pass
+        if self.loss == 'GE2E':
+            s.append(f'M{self.M}')
         elif self.loss == 'AAM':
             s.extend([f's{self.s}', f'm{self.m}'])
-        else:
-            assert self.loss == 'AAMSC'
+        elif self.loss == 'AAMSC':
             s.extend([f's{self.s}', f'm{self.m}', f'K{self.K}'])
+        else:
+            assert self.loss == 'CE'
 
         s.append(f'seed{self.random_seed}')
 
