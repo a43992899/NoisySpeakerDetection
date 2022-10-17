@@ -169,18 +169,17 @@ def train(
                 local_iterations += 1
                 if total_iterations >= cfg.iterations:
                     break
-
-            if not debug:
-                wandb.log({'Loss': total_loss / local_iterations})
-                if total_iterations % save_interval == 0:
+                if (not debug) and total_iterations % save_interval == 0:
                     iteration_string = str(total_iterations).zfill(len(str(cfg.iterations)))
                     torch.save(embedder_net.state_dict(), checkpoint_dir / f'model-{iteration_string}.pth')
                     torch.save(criterion.state_dict(), checkpoint_dir / f'loss-{iteration_string}.pth')
 
-    torch.save(embedder_net.state_dict(), checkpoint_dir / 'model-final.pth')
-    torch.save(criterion.state_dict(), checkpoint_dir / 'loss-final.pth')
+            if not debug:
+                wandb.log({'Loss': total_loss / local_iterations})
 
-    if debug:
+    if not debug:
+        torch.save(embedder_net.state_dict(), checkpoint_dir / 'model-final.pth')
+        torch.save(criterion.state_dict(), checkpoint_dir / 'loss-final.pth')
         wandb.finish()
 
 
@@ -287,50 +286,50 @@ def train(
 
 
 # def test(hp: Config, csv_path: str):
-    # if os.path.isfile(hp.test.model_path):
-    #     test_one(hp)
-    # elif os.path.isdir(hp.test.model_path):
-    #     if not os.path.exists(csv_path):
-    #         csv_header_line = 'ModelPath,EER(%),Threshold(%)\n'
-    #         write_to_csv(csv_path, csv_header_line)
-    #         tested_model_paths = []
-    #     else:
-    #         # read csv, get the model paths
-    #         csv_file = open(csv_path, 'r')
-    #         csv_lines = csv_file.readlines()
-    #         csv_file.close()
-    #         tested_model_paths = [line.split(',')[0] for line in csv_lines[1:]]
+#     if os.path.isfile(hp.test.model_path):
+#         test_one(hp)
+#     elif os.path.isdir(hp.test.model_path):
+#         if not os.path.exists(csv_path):
+#             csv_header_line = 'ModelPath,EER(%),Threshold(%)\n'
+#             write_to_csv(csv_path, csv_header_line)
+#             tested_model_paths = []
+#         else:
+#             # read csv, get the model paths
+#             csv_file = open(csv_path, 'r')
+#             csv_lines = csv_file.readlines()
+#             csv_file.close()
+#             tested_model_paths = [line.split(',')[0] for line in csv_lines[1:]]
 
-    #     pth_list = sorted(get_all_file_with_ext(hp.test.model_path, '.pth'))
-    #     for file in pth_list:
-    #         if 'ckpt_criterion_epoch' in file or file in tested_model_paths:
-    #             continue
-    #         else:
-    #             file_to_test = None
-    #             if '/GE2E/' in file:
-    #                 if isTarget(
-    #                     file,
-    #                     target_strings=[
-    #                         'ckpt_epoch_100.pth',
-    #                         'ckpt_epoch_200.pth',
-    #                         'ckpt_epoch_300.pth',
-    #                         'ckpt_epoch_400.pth',
-    #                         'ckpt_epoch_800.pth']):
-    #                     file_to_test = file
-    #                 else:
-    #                     continue
-    #             elif isTarget(file, target_strings=['/Softmax/', '/AAM/', '/AAMSC/']):
-    #                 if 'bs128' in file and 'ckpt_epoch_1600.pth' in file:
-    #                     file_to_test = file
-    #                 elif 'bs256' in file and 'ckpt_epoch_3200.pth' in file:
-    #                     file_to_test = file
-    #                 else:
-    #                     continue
-    #             else:
-    #                 continue
-    #             eer, thresh = test_one(file_to_test)
-    #             csv_line = f"{file_to_test},{eer*100},{thresh*100}\n"
-    #             write_to_csv(csv_path, csv_line)
+#         pth_list = sorted(get_all_file_with_ext(hp.test.model_path, '.pth'))
+#         for file in pth_list:
+#             if 'ckpt_criterion_epoch' in file or file in tested_model_paths:
+#                 continue
+#             else:
+#                 file_to_test = None
+#                 if '/GE2E/' in file:
+#                     if isTarget(
+#                         file,
+#                         target_strings=[
+#                             'ckpt_epoch_100.pth',
+#                             'ckpt_epoch_200.pth',
+#                             'ckpt_epoch_300.pth',
+#                             'ckpt_epoch_400.pth',
+#                             'ckpt_epoch_800.pth']):
+#                         file_to_test = file
+#                     else:
+#                         continue
+#                 elif isTarget(file, target_strings=['/Softmax/', '/AAM/', '/AAMSC/']):
+#                     if 'bs128' in file and 'ckpt_epoch_1600.pth' in file:
+#                         file_to_test = file
+#                     elif 'bs256' in file and 'ckpt_epoch_3200.pth' in file:
+#                         file_to_test = file
+#                     else:
+#                         continue
+#                 else:
+#                     continue
+#                 eer, thresh = test_one(file_to_test)
+#                 csv_line = f"{file_to_test},{eer*100},{thresh*100}\n"
+#                 write_to_csv(csv_path, csv_line)
 
-    # else:
-    #     print("model_path is not a file or a directory")
+#     else:
+#         print("model_path is not a file or a directory")
