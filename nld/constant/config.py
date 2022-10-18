@@ -151,5 +151,5 @@ class TestConfig(BaseConfig):
 
     random_seed: Optional[int]
 
-    model_dir: str
+    model_dir: Path
     iteration: str
