@@ -1,6 +1,6 @@
 import json
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 import numpy as np
 import torch
@@ -19,7 +19,7 @@ from ..utils import clean_memory, compute_eer, set_random_seed_to
 
 
 def train(
-    cfg: TrainConfig, mislabeled_json_file: Path, vox1_mel_spectrogram_dir: Path,
+    cfg: TrainConfig, mislabeled_json_file: Optional[Path], vox1_mel_spectrogram_dir: Path,
     vox2_mel_spectrogram_dir: Path, training_model_save_dir: Path, save_interval: int, debug: bool
 ):
     set_random_seed_to(cfg.random_seed)
@@ -208,7 +208,11 @@ def test(
                 )
 
                 enrollment_centroids = torch.mean(enrollment_embeddings, dim=1)
-                verification_embeddings = verification_embeddings.reshape((-1, verification_embeddings.size(-1)))
+                # TODO: why direct reshape does not work?
+                # verification_embeddings = verification_embeddings.reshape((-1, verification_embeddings.size(-1)))
+                verification_embeddings = torch.cat(
+                    [verification_embeddings[:, 0], verification_embeddings[:, 1], verification_embeddings[:, 2]]
+                )
 
                 verification_embeddings_norm: Tensor = \
                     verification_embeddings / torch.norm(verification_embeddings, dim=1).unsqueeze(-1)
