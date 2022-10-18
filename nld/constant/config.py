@@ -150,3 +150,7 @@ class TestConfig(BaseConfig):
     M: int
 
     random_seed: Optional[int]
+
+    # TODO: add related training config to this model
+    # model_path: str
+    # iteration: str

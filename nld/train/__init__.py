@@ -38,14 +38,17 @@ def train_main(args):
     debug: bool = args.debug
     save_interval: int = args.save_interval
 
-    for mislabeled_json_file in mislabeled_json_dir.iterdir():
-        if not mislabeled_json_file.is_file():
-            continue
-        mislabeled_json_file_name = mislabeled_json_file.stem
-        if str(cfg.noise_level) in mislabeled_json_file_name and cfg.noise_type in mislabeled_json_file_name:
-            break
+    if cfg.noise_level != 0:
+        for mislabeled_json_file in mislabeled_json_dir.iterdir():
+            if not mislabeled_json_file.is_file():
+                continue
+            mislabeled_json_file_name = mislabeled_json_file.stem
+            if str(cfg.noise_level) in mislabeled_json_file_name and cfg.noise_type in mislabeled_json_file_name:
+                break
+        else:
+            raise FileNotFoundError()
     else:
-        raise FileNotFoundError()
+        mislabeled_json_file = None
 
     train(
         cfg, mislabeled_json_file, vox1_mel_spectrogram_dir, vox2_mel_spectrogram_dir,
