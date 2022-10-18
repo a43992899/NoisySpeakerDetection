@@ -143,17 +143,14 @@ def train(
 
 
 def test(
-    test_config: TestConfig, model_dir: Path,
-    selected_iterations: List[str], vox1test_mel_spectrogram_dir: Path, debug: bool,
+    test_config: TestConfig, vox1test_mel_spectrogram_dir: Path, debug: bool,
 ):
     device = torch.device('cuda' if cuda_is_available() else 'cpu')
-    training_config = TrainConfig.from_json(model_dir / 'config.json')
+    training_config = TrainConfig.from_json(test_config.model_dir / 'config.json')
     set_random_seed_to(
         test_config.random_seed if test_config.random_seed is not None
         else training_config.random_seed
     )
-
-    models = list(map(lambda i: model_dir / f'model-{i}.pth', selected_iterations))
 
     data_processing_config = DataConfig.from_json(vox1test_mel_spectrogram_dir / 'data-processing-config.json')
 
@@ -169,71 +166,72 @@ def test(
         pin_memory=True,
     )
 
-    for iteration, model in zip(selected_iterations, models):
-        missing_keys, unexpected_keys = embedder_net.load_state_dict(torch.load(model))
-        if len(missing_keys) != 0 or len(unexpected_keys) != 0:
-            raise ValueError()
+    missing_keys, unexpected_keys = embedder_net.load_state_dict(
+        torch.load(test_config.model_dir / f'model-{test_config.iteration}.pth')
+    )
+    if len(missing_keys) != 0 or len(unexpected_keys) != 0:
+        raise ValueError()
 
-        if not debug:
-            wandb.init(
-                project=WANDB_TESTING_PROJECT_NAME,
-                entity=WANDB_ENTITY,
-                config=test_config.to_dict(),
-                name=f'{training_config.description}-{iteration}',
-                reinit=True,
+    if not debug:
+        wandb.init(
+            project=WANDB_TESTING_PROJECT_NAME,
+            entity=WANDB_ENTITY,
+            config=test_config.to_dict(),
+            name=f'{training_config.description}-{test_config.iteration}',
+            reinit=True,
+        )
+
+    similarity_matrices = []
+    labels = []
+    for _ in tqdm(range(test_config.epochs), desc=f'Testing {test_config.iteration = }...'):
+        for mels, _, _, _, _ in test_data_loader:
+            mels: Tensor = mels.to(device)
+
+            enrollment_batch, verification_batch = mels.split(int(mels.size(1) / 2), dim=1)
+            enrollment_batch = enrollment_batch.reshape(
+                (test_config.N * test_config.M // 2, enrollment_batch.size(2), enrollment_batch.size(3))
+            )
+            verification_batch = verification_batch.reshape(
+                (test_config.N * test_config.M // 2, verification_batch.size(2), verification_batch.size(3))
             )
 
-        similarity_matrices = []
-        labels = []
-        for _ in tqdm(range(test_config.epochs), desc=f'Testing {iteration = }...'):
-            for mels, _, _, _, _ in test_data_loader:
-                mels: Tensor = mels.to(device)
+            enrollment_embeddings = embedder_net.get_embedding(enrollment_batch)
+            verification_embeddings = embedder_net.get_embedding(verification_batch)
 
-                enrollment_batch, verification_batch = mels.split(int(mels.size(1) / 2), dim=1)
-                enrollment_batch = enrollment_batch.reshape(
-                    (test_config.N * test_config.M // 2, enrollment_batch.size(2), enrollment_batch.size(3))
-                )
-                verification_batch = verification_batch.reshape(
-                    (test_config.N * test_config.M // 2, verification_batch.size(2), verification_batch.size(3))
-                )
-
-                enrollment_embeddings = embedder_net.get_embedding(enrollment_batch)
-                verification_embeddings = embedder_net.get_embedding(verification_batch)
-
-                enrollment_embeddings = enrollment_embeddings.reshape(
-                    (test_config.N, test_config.M // 2, enrollment_embeddings.size(1))
-                )
-                verification_embeddings = verification_embeddings.reshape(
-                    (test_config.N, test_config.M // 2, verification_embeddings.size(1))
-                )
-
-                enrollment_centroids = torch.mean(enrollment_embeddings, dim=1)
-                # TODO: why direct reshape does not work?
-                # verification_embeddings = verification_embeddings.reshape((-1, verification_embeddings.size(-1)))
-                verification_embeddings = torch.cat(
-                    [verification_embeddings[:, 0], verification_embeddings[:, 1], verification_embeddings[:, 2]]
-                )
-
-                verification_embeddings_norm: Tensor = \
-                    verification_embeddings / torch.norm(verification_embeddings, dim=1).unsqueeze(-1)
-                enrollment_centroids_norm: Tensor = \
-                    enrollment_centroids / torch.norm(enrollment_centroids, dim=1).unsqueeze(-1)
-
-                similarity_matrix = verification_embeddings_norm @ enrollment_centroids_norm.transpose(-1, -2)
-                ground_truth = torch.zeros(similarity_matrix.size())
-                for i in range(ground_truth.size(0)):
-                    ground_truth[i, i % test_config.N] = 1
-
-                similarity_matrices.append(similarity_matrix.flatten().detach().cpu().numpy())
-                labels.append(ground_truth.flatten().detach().cpu().numpy())
-
-            eer, thresh = compute_eer(
-                np.concatenate(similarity_matrices),
-                np.concatenate(labels),
+            enrollment_embeddings = enrollment_embeddings.reshape(
+                (test_config.N, test_config.M // 2, enrollment_embeddings.size(1))
+            )
+            verification_embeddings = verification_embeddings.reshape(
+                (test_config.N, test_config.M // 2, verification_embeddings.size(1))
             )
 
-            if not debug:
-                wandb.log({'Equal Error Rate': eer, 'Threshold': thresh})
+            enrollment_centroids = torch.mean(enrollment_embeddings, dim=1)
+            # TODO: why direct reshape does not work?
+            # verification_embeddings = verification_embeddings.reshape((-1, verification_embeddings.size(-1)))
+            verification_embeddings = torch.cat(
+                [verification_embeddings[:, 0], verification_embeddings[:, 1], verification_embeddings[:, 2]]
+            )
+
+            verification_embeddings_norm: Tensor = \
+                verification_embeddings / torch.norm(verification_embeddings, dim=1).unsqueeze(-1)
+            enrollment_centroids_norm: Tensor = \
+                enrollment_centroids / torch.norm(enrollment_centroids, dim=1).unsqueeze(-1)
+
+            similarity_matrix = verification_embeddings_norm @ enrollment_centroids_norm.transpose(-1, -2)
+            ground_truth = torch.zeros(similarity_matrix.size())
+            for i in range(ground_truth.size(0)):
+                ground_truth[i, i % test_config.N] = 1
+
+            similarity_matrices.append(similarity_matrix.flatten().detach().cpu().numpy())
+            labels.append(ground_truth.flatten().detach().cpu().numpy())
+
+        eer, thresh = compute_eer(
+            np.concatenate(similarity_matrices),
+            np.concatenate(labels),
+        )
 
         if not debug:
-            wandb.finish()
+            wandb.log({'Equal Error Rate': eer, 'Threshold': thresh})
+
+    if not debug:
+        wandb.finish()

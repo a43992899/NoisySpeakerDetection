@@ -2,7 +2,7 @@ from pathlib import Path
 from typing import List, Optional
 
 from ..constant.config import TestConfig, TrainConfig
-from .train import train, test
+from .train import test, train
 
 
 def train_main(args):
@@ -63,17 +63,6 @@ def test_main(args):
     vox1test_mel_spectrogram_dir: Path = args.vox1test_mel_spectrogram_dir
     debug: bool = args.debug
 
-    if args.M % 2 != 0:
-        raise ValueError()
-
-    test_config = TestConfig(
-        N=args.N,
-        M=args.M,
-        epochs=args.epochs,
-        dataloader_num_workers=args.dataloader_num_workers,
-        random_seed=args.random_seed
-    )
-
     if selected_iterations is None:
         selected_iterations = sorted(map(
             lambda s: s.stem.split('-')[-1],
@@ -81,4 +70,18 @@ def test_main(args):
         ), reverse=True)
         selected_iterations = selected_iterations[0:len(selected_iterations) // 2:stride]
 
-    test(test_config, model_dir, selected_iterations, vox1test_mel_spectrogram_dir, debug)
+    if args.M % 2 != 0:
+        raise ValueError()
+
+    for selected_iteration in selected_iterations:
+        test_config = TestConfig(
+            N=args.N,
+            M=args.M,
+            epochs=args.epochs,
+            dataloader_num_workers=args.dataloader_num_workers,
+            random_seed=args.random_seed,
+            model_dir=model_dir,
+            iteration=selected_iteration
+        )
+
+        test(test_config, vox1test_mel_spectrogram_dir, debug)
