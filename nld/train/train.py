@@ -142,9 +142,7 @@ def train(
         wandb.finish()
 
 
-def test(
-    test_config: TestConfig, vox1test_mel_spectrogram_dir: Path, debug: bool,
-):
+def test(test_config: TestConfig, vox1test_mel_spectrogram_dir: Path, debug: bool):
     device = torch.device('cuda' if cuda_is_available() else 'cpu')
     training_config = TrainConfig.from_json(test_config.model_dir / 'config.json')
     set_random_seed_to(
