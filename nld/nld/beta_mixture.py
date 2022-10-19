@@ -1,3 +1,10 @@
+"""
+Modified from:
+https://github.com/PaulAlbert31/LabelNoiseCorrection/blob/5e9a73ee52b7685d93a4fd1d0e66fb0ab5db955a/utils.py#L657
+"""
+
+from typing import List
+
 import matplotlib.pyplot as plt
 import numpy as np
 import numpy.typing as npt
@@ -16,11 +23,11 @@ def fit_beta_weighted(x: npt.ArrayLike, w: npt.ArrayLike):
     return alpha, beta
 
 
-class BetaMixture1D(object):
-    def __init__(self, max_iters=10,
-                 alphas_init=[1, 2],
-                 betas_init=[2, 1],
-                 weights_init=[0.5, 0.5]):
+class BetaMixture1D:
+    def __init__(
+        self, max_iters: int = 10, alphas_init: List[float] = [1.0, 2.0],
+        betas_init: List[float] = [2.0, 1.0], weights_init: List[float] = [0.5, 0.5]
+    ):
         self.alphas = np.array(alphas_init, dtype=np.float64)
         self.betas = np.array(betas_init, dtype=np.float64)
         self.weight = np.array(weights_init, dtype=np.float64)
@@ -100,7 +107,7 @@ class BetaMixture1D(object):
         return 'BetaMixture1D(w={}, a={}, b={})'.format(self.weight, self.alphas, self.betas)
 
 
-def fit_bmm(data, normalization=True, rm_outliers=False, max_iters=10):
+def fit_bmm(data: npt.NDArray, normalization=True, rm_outliers=False, max_iters=10):
     bmm_model_max, bmm_model_min = None, None
     if normalization:
         if rm_outliers:

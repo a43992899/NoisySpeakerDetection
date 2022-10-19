@@ -11,7 +11,7 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from .constant.config import Hparam
-from .model.beta_mixture import fit_bmm
+from .nld.beta_mixture import fit_bmm
 from .model.loss import (AAMSoftmax, GE2ELoss, SpeechEmbedder,
                          SpeechEmbedder_Softmax, SubcenterArcMarginProduct,
                          get_cossim)
