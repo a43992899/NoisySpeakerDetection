@@ -72,7 +72,7 @@ class SpeakerUtteranceDataset(Dataset):
         return torch.from_numpy(spectrogram), is_noisy, selected_id, tainted_utterane_path, original_utterance_path
 
     @staticmethod
-    def collate_fn(batch: Sequence[Tensor, bool, int, Path, Path]):
+    def collate_fn(batch: Sequence[Tuple[Tensor, bool, int, Path, Path]]):
         return (
             torch.stack([b[0] for b in batch]),
             torch.tensor([b[1] for b in batch]),
