@@ -90,18 +90,18 @@ class AAMSoftmax(nn.Module):
     def predict(self, x: Tensor, label: Tensor):
         assert x.size(0) == label.size(0)
         assert x.size(1) == self.in_feats
-        cosine = F.linear(F.normalize(x), F.normalize(self.weight))
-        sine = torch.sqrt((1.0 - torch.mul(cosine, cosine)).clamp(0, 1))
-        phi = cosine * self.cos_m - sine * self.sin_m
+        cosine_theta = F.linear(F.normalize(x), F.normalize(self.weight))  # \cos_\theta
+        sine_theta = torch.sqrt((1.0 - torch.mul(cosine_theta, cosine_theta)).clamp(0, 1))  # \sin_\theta
+        cos_theta_plus_m = cosine_theta * self.cos_m - sine_theta * self.sin_m  # \cos(\theta + m)
 
         if self.easy_margin:
-            phi = torch.where(cosine > 0, phi, cosine)
+            phi = torch.where(cosine_theta > 0, cos_theta_plus_m, cosine_theta)
         else:
-            phi = torch.where((cosine - self.th) > 0, phi, cosine - self.mm)
+            phi = torch.where((cosine_theta - self.th) > 0, cos_theta_plus_m, cosine_theta - self.mm)
 
-        one_hot = torch.zeros_like(cosine)
+        one_hot = torch.zeros_like(cosine_theta)
         one_hot.scatter_(1, label.view(-1, 1), 1)
-        output: Tensor = (one_hot * phi) + ((1.0 - one_hot) * cosine)
+        output: Tensor = one_hot * phi + (1.0 - one_hot) * cosine_theta
         output = output * self.s
 
         return output

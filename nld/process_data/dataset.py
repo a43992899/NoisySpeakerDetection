@@ -52,7 +52,6 @@ class SpeakerUtteranceDataset(Dataset):
         original_label = selected_speaker_utterance.split('-')[0]
 
         if self.mislabeled_mapping is not None and selected_speaker_utterance in self.mislabeled_mapping:
-            assert self.noise_mel_spectrogram_dir is not None
             is_noisy = True
             mislabeled = self.mislabeled_mapping[selected_speaker_utterance]
             if mislabeled.endswith('.npy'):
@@ -145,7 +144,6 @@ class SpeakerDataset(Dataset):
         for i in range(self.sample_num):
             vox2_selected_file = selected_speaker_mel_spectrogram_files[i]
             if self.mislabeled_mapping is not None and vox2_selected_file in self.mislabeled_mapping:
-                assert self.noise_mel_spectrogram_dir is not None
                 selected_file_is_noisy[i] = True
                 mislabeled = self.mislabeled_mapping[vox2_selected_file]
                 if mislabeled.endswith('.npy'):
