@@ -1,51 +1,45 @@
+import argparse
 import os
-os.chdir(os.path.dirname(os.path.abspath(__file__))) # change to current file path
 import random
-import time, shutil
+from typing import Union
+
+import numpy as np
+import pandas as pd
+import seaborn as sns
 import torch
 from torch.utils.data import DataLoader
-import torch.nn.functional as F
-from hparam import Hparam
-from data_load import SpeakerDatasetPreprocessed
-from speech_embedder_net import SpeechEmbedder, SpeechEmbedder_Softmax, GE2ELoss_, AngularPenaltySMLoss, AAMSoftmax,SubcenterArcMarginProduct, get_centroids, get_cossim
-from torch.utils.tensorboard import SummaryWriter
-from scipy.optimize import brentq
-from scipy.interpolate import interp1d
-from sklearn.metrics import roc_curve
-from sklearn.metrics import precision_recall_curve
-import numpy as np
-from numpy.linalg import solve
-import scipy.linalg
-import scipy.stats
 from tqdm import tqdm
-from utils import compute_eer, fit_bmm
-import pandas as pd
-from sklearn.mixture import GaussianMixture
-import seaborn as sns
-import argparse
-from utils import compute_eer, get_all_file_with_ext, isTarget, write_to_csv
 
-random.seed(1)
-np.random.seed(1)
-torch.manual_seed(1)
+from .constant.config import Hparam
+from .nld.beta_mixture import fit_bmm
+from .model.loss import (AAMSoftmax, GE2ELoss, SpeechEmbedder,
+                         SpeechEmbedder_Softmax, SubcenterArcMarginProduct,
+                         get_cossim)
+from .process_data.dataset import SpeakerDatasetPreprocessed
+from .utils import (get_all_file_with_ext, isTarget, set_random_seed_to,
+                    write_to_csv)
+
+os.chdir(os.path.dirname(os.path.abspath(__file__)))  # change to current file path
+
+set_random_seed_to(1)
 # print("current dir: ", os.getcwd())
 hp = Hparam(file='config/config.yaml')
 hp.stage = 'nld'
 skip_plot_list = ['/home/yrb/code/speechbrain/data/models/Permute/GE2E/75%/m16_bs256/ckpt_epoch_100.pth']
+
+
 def get_n_params(model):
     model_parameters = filter(lambda p: p.requires_grad, model.parameters())
     params = sum([np.prod(p.size()) for p in model_parameters])
 
     return params
 
-def extract_emb(embedder_net, batch):
+
+def extract_emb(embedder_net: Union[SpeechEmbedder, SpeechEmbedder_Softmax], batch: Tensor):
     if batch.ndim == 4:
         batch = batch.reshape(-1, batch.size(2), batch.size(3))
-    if embedder_net.__class__.__name__ == 'SpeechEmbedder_Softmax':
-        embeddings = embedder_net.get_embedding(batch)
-    else:
-        embeddings = embedder_net(batch)
-    return embeddings
+    return embedder_net.get_embedding(batch)
+
 
 def get_criterion(device, model_path):
     loss_type = None
@@ -59,13 +53,14 @@ def get_criterion(device, model_path):
                 loss_type = 'AAM'
             else:
                 loss_type = 'AAMSC'
-                # get number k from string "/home/yrb/code/speechbrain/data/models/Open/AAMSC/20%/m0.1_s15_k3_bs128/ckpt_epoch_40.pth"
+                # get number k from string
+                # "/home/yrb/code/speechbrain/data/models/Open/AAMSC/20%/m0.1_s15_k3_bs128/ckpt_epoch_40.pth"
                 k = int(model_path.split('/')[-2].split('_')[-2].replace('k', ''))
             break
     if loss_type == 'Softmax':
         criterion = torch.nn.NLLLoss()
     elif loss_type == 'GE2E':
-        criterion = GE2ELoss_(init_w=10.0, init_b=-5.0, loss_method='softmax').to(device)
+        criterion = GE2ELoss(init_w=10.0, init_b=-5.0, loss_method='softmax').to(device)
     elif loss_type == 'AAM':
         criterion = AAMSoftmax(hp.model.proj, 5994, scale=hp.train.s, margin=hp.train.m, easy_margin=True).to(device)
     elif loss_type == 'AAMSC':
@@ -76,10 +71,8 @@ def get_criterion(device, model_path):
 
 # model_path = hp.nld.model_path
 
+
 device = torch.device(hp.device)
-random.seed(0)
-torch.manual_seed(0)
-torch.cuda.manual_seed_all(0)
 
 
 def eval_one(model_path, stop_batch_id=500, skip_plot=False):
@@ -93,7 +86,7 @@ def eval_one(model_path, stop_batch_id=500, skip_plot=False):
     try:
         embedder_net = SpeechEmbedder(hp).to(device)
         embedder_net.load_state_dict(torch.load(model_path))
-    except:
+    except BaseException:
         embedder_net = SpeechEmbedder_Softmax(hp=hp, num_classes=5994).to(device)
         embedder_net.load_state_dict(torch.load(model_path))
 
@@ -109,22 +102,26 @@ def eval_one(model_path, stop_batch_id=500, skip_plot=False):
 
     cos = torch.nn.CosineSimilarity(dim=-1, eps=1e-6)
     nld_dataset = SpeakerDatasetPreprocessed(hp)
-    nld_loader = DataLoader(nld_dataset, batch_size=hp.nld.N, shuffle=False, num_workers=hp.nld.num_workers, drop_last=False)
+    nld_loader = DataLoader(
+        nld_dataset,
+        batch_size=hp.nld.N,
+        shuffle=False,
+        num_workers=hp.nld.num_workers,
+        drop_last=False)
     for batch_id, (mel_db_batch, labels, is_noisy, utterance_ids) in enumerate(tqdm(nld_loader)):
         utterance_ids = np.array(utterance_ids).T
         mel_db_batch = mel_db_batch.to(device)
-        
-        embeddings = extract_emb(embedder_net, mel_db_batch) 
-        embeddings = torch.reshape(embeddings, (hp.nld.N, hp.nld.M, embeddings.size(1))) # (1, M, 256)
+
+        embeddings = extract_emb(embedder_net, mel_db_batch)
+        embeddings = torch.reshape(embeddings, (hp.nld.N, hp.nld.M, embeddings.size(1)))  # (1, M, 256)
         centroid = embeddings.mean(dim=1, keepdim=True)
-        embeddings = embeddings / embeddings.norm(dim=2, keepdim=True) 
+        embeddings = embeddings / embeddings.norm(dim=2, keepdim=True)
         centroid = centroid / centroid.norm(dim=2, keepdim=True)
         cos_sim = get_cossim(embeddings, centroid, cos)
         ypreds.extend((1 - cos_sim).reshape(-1).cpu().detach().numpy().tolist())
         ylabels.extend(is_noisy.reshape(-1).cpu().detach().numpy().tolist())
         if batch_id == stop_batch_id:
             break
-        
 
     # select top noise level % from ypreds
     noise_level = hp.nld.noise_level
@@ -144,7 +141,7 @@ def eval_one(model_path, stop_batch_id=500, skip_plot=False):
     # create df from ypreds and ylabels
     df = pd.DataFrame({"Distance": ypreds, "isNoisy": ylabels})
     # print("plot distance distribution")
-    
+
     if not skip_plot:
         sns.set()
         distance_plot = sns.displot(df, x="Distance", hue="isNoisy")
@@ -156,7 +153,7 @@ def eval_one(model_path, stop_batch_id=500, skip_plot=False):
     # bmm_model.plot()
 
     # Noise level estimation
-    if hp.nld.noise_level >=70:
+    if hp.nld.noise_level >= 70:
         estimated_noise_level = bmm_model.weight[0]
     else:
         estimated_noise_level = bmm_model.weight[1]
@@ -169,8 +166,8 @@ def eval_one(model_path, stop_batch_id=500, skip_plot=False):
 
     return detection_precision, estimated_noise_level, real_noise_level, noise_level_label, distance_plot
 
-def evaluation(model_dir, csv_path, stop_batch_id=500):
 
+def evaluation(model_dir, csv_path, stop_batch_id=500):
     if not os.path.exists(csv_path):
         csv_header_line = 'ModelPath,Noise_level_lab,DetPrecision,Estimated_noise_lvl,Real_noise_level\n'
         write_to_csv(csv_path, csv_header_line)
@@ -182,15 +179,21 @@ def evaluation(model_dir, csv_path, stop_batch_id=500):
         csv_file.close()
         evaled_model_paths = [line.split(',')[0] for line in csv_lines[1:]]
 
-    pth_list = list(get_all_file_with_ext(hp.nld.model_path, '.pth'))
-    pth_list.sort()
+    pth_list = sorted(get_all_file_with_ext(hp.nld.model_path, '.pth'))
     for file in pth_list:
         if 'ckpt_criterion_epoch' in file or file in evaled_model_paths or 'bs128' in file:
             continue
         else:
             file_to_eval = None
             if '/GE2E/' in file:
-                if isTarget(file, target_strings=['ckpt_epoch_100.pth', 'ckpt_epoch_200.pth', 'ckpt_epoch_300.pth', 'ckpt_epoch_400.pth', 'ckpt_epoch_800.pth']):
+                if isTarget(
+                    file,
+                    target_strings=[
+                        'ckpt_epoch_100.pth',
+                        'ckpt_epoch_200.pth',
+                        'ckpt_epoch_300.pth',
+                        'ckpt_epoch_400.pth',
+                        'ckpt_epoch_800.pth']):
                     file_to_eval = file
                 else:
                     continue
@@ -205,16 +208,22 @@ def evaluation(model_dir, csv_path, stop_batch_id=500):
                 continue
             print()
             print("Evaluating model: ", file_to_eval)
-            detection_precision, estimated_noise_level, real_noise_level, noise_level_label, distance_plot = eval_one(file_to_eval, stop_batch_id, skip_plot=file_to_eval in skip_plot_list)
+            detection_precision, estimated_noise_level, real_noise_level, noise_level_label, distance_plot = eval_one(
+                file_to_eval, stop_batch_id, skip_plot=file_to_eval in skip_plot_list)
             csv_line = f"{file_to_eval},{noise_level_label},{detection_precision*100},{estimated_noise_level*100},{real_noise_level}\n"
             write_to_csv(csv_path, csv_line)
             # get dir of file_to_eval
             if distance_plot is not None:
                 distance_plot.savefig(os.path.join(os.path.dirname(file_to_eval), "distance_distribution.png"))
 
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('--csv', type=str, default='../data/distance_based_nld_results.csv', help='csv path for writing nld results')
+    parser.add_argument(
+        '--csv',
+        type=str,
+        default='../data/distance_based_nld_results.csv',
+        help='csv path for writing nld results')
     parser.add_argument('--stop_batch_id', type=int, default=500, help='stop batch id for evaluation')
     args = parser.parse_args()
     evaluation(hp.nld.model_path, args.csv, args.stop_batch_id)
