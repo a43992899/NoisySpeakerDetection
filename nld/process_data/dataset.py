@@ -11,6 +11,46 @@ from torch.utils.data import Dataset
 VOX2_CLASS_NUM = 5994
 
 
+def iterate_speaker_utterance(
+    noise_mel_spectrogram_dir: Optional[Path],
+    main_mel_spectrogram_dir: Path,
+    mislabeled_json_file: Optional[Path],
+):
+    with open(main_mel_spectrogram_dir / 'speaker-label-to-id.json', 'r') as f:
+        speaker_label_to_id: Dict[str, int] = json.load(f)
+    if mislabeled_json_file is not None:
+        with open(mislabeled_json_file, 'r') as f:
+            mislabeled_mapping: Dict[str, str] = json.load(f)
+    else:
+        mislabeled_mapping = None
+
+    for original_utterance_path in main_mel_spectrogram_dir.iterdir():
+        if original_utterance_path.suffix != '.npy':
+            continue
+
+        original_speaker_label = original_utterance_path.name.split('-')[0]
+        try:
+            mislabeled = mislabeled_mapping[original_speaker_label]
+            is_noisy = True
+            if mislabeled.endswith('.npy'):
+                tainted_utterance_path = noise_mel_spectrogram_dir / mislabeled
+                spectrogram = np.load(tainted_utterane_path).transpose()
+                label = original_speaker_label
+            else:
+                tainted_utterance_path = original_utterance_path
+                spectrogram = np.load(original_utterance_path).transpose()
+                label = mislabeled
+        except (TypeError, LookupError):
+            is_noisy = False
+            tainted_utterane_path = original_utterance_path
+            spectrogram = np.load(original_utterance_path).transpose()
+            label = original_speaker_label
+
+        selected_id = speaker_label_to_id[label]
+
+        yield torch.from_numpy(spectrogram), is_noisy, selected_id, tainted_utterance_path, original_utterance_path
+
+
 class SpeakerUtteranceDataset(Dataset):
     noise_mel_spectrogram_dir: Optional[Path]
     main_mel_spectrogram_dir: Path
@@ -87,9 +127,8 @@ class SpeakerLabelDataset(Dataset):
     main_mel_spectrogram_dir: Path
 
     speaker_labels: List[str]
-    speaker_utterances: Dict[str, List[str]]
     speaker_label_to_id: Dict[str, int]
-    mislabeled_mapping: Optional[Dict[str, str]]
+    speaker_label_to_utterances: Dict[str, List[Tuple[str, bool]]]
 
     def __init__(
         self, noise_mel_spectrogram_dir: Optional[Path],
@@ -103,62 +142,48 @@ class SpeakerLabelDataset(Dataset):
 
         if mislabeled_json_file is not None:
             with open(mislabeled_json_file, 'r') as f:
-                self.mislabeled_mapping = json.load(f)
+                mislabeled_mapping: Dict[str, str] = json.load(f)
         else:
-            self.mislabeled_mapping = None
+            mislabeled_mapping = None
 
         with open(main_mel_spectrogram_dir / 'speaker-label-to-id.json', 'r') as f:
-            self.speaker_label_to_id = json.load(f)
+            self.speaker_label_to_id: Dict[str, int] = json.load(f)
+        self.speaker_labels = sorted(self.speaker_label_to_id.keys)
+        self.speaker_label_to_utterances = {k: [] for k in self.speaker_label_to_id.keys()}
 
-        self.speaker_utterances = {k: [] for k in self.speaker_label_to_id.keys()}
         for p in main_mel_spectrogram_dir.iterdir():
-            self.speaker_utterances[p.name.split('-')[0]].append(p.name)
-        self.speaker_labels = list(self.speaker_label_to_id.keys())
+            true_label = p.name.split('-')[0]
+            try:
+                mislabeled = mislabeled_mapping[p.name]
+                is_noisy = True
+                if mislabeled.endswith('.npy'):
+                    assert noise_mel_spectrogram_dir is not None
+                    utterance_path = noise_mel_spectrogram_dir / mislabeled
+                    label = true_label
+                else:
+                    utterance_path = p
+                    label = mislabeled
+            except (LookupError, TypeError):
+                is_noisy = False
+                utterance_path = p
+                label = true_label
+
+            self.speaker_label_to_utterances[label].append((str(utterance_path), is_noisy))
 
     def __len__(self):
-        return len(self.speaker_labels)
+        return len(self.speaker_label_to_utterances)
 
-    def __getitem__(self, index: int):
-        selected_speaker_label = self.speaker_labels[index]
-        selected_speaker_utterances = self.speaker_utterances[selected_speaker_label]
-
-        spectrograms: List[Tensor] = []
-        is_noisy_s: List[bool] = []
-        selected_ids: List[int] = []
-        tainted_paths: List[Path] = []
-        untainted_paths: List[Path] = []
-
-        for speaker_utterance in selected_speaker_utterances:
-            original_utterance_path = self.main_mel_spectrogram_dir / speaker_utterance
-
-            if self.mislabeled_mapping is not None and speaker_utterance in self.mislabeled_mapping:
-                is_noisy = True
-                mislabeled = self.mislabeled_mapping[speaker_utterance]
-                if mislabeled.endswith('.npy'):
-                    tainted_utterane_path = self.noise_mel_spectrogram_dir / mislabeled
-                    spectrogram = np.load(tainted_utterane_path).transpose()
-                    label = selected_speaker_label
-                else:
-                    tainted_utterane_path = original_utterance_path
-                    spectrogram = np.load(original_utterance_path).transpose()
-                    label = mislabeled
-            else:
-                is_noisy = False
-                tainted_utterane_path = original_utterance_path
-                spectrogram = np.load(original_utterance_path).transpose()
-                label = selected_speaker_label
-
-            selected_id = self.speaker_label_to_id[label]
-            spectrograms.append(spectrogram)
-            is_noisy_s.append(is_noisy)
-            selected_ids.append(selected_id)
-            tainted_paths.append(tainted_utterane_path)
-            untainted_paths.append(original_utterance_path)
-
-        return torch.from_numpy(np.stack(spectrograms)), is_noisy_s, selected_ids, tainted_paths, untainted_paths
+    def __getitem__(self, i: int):
+        label = self.speaker_labels[i]
+        selected_utterances = self.speaker_label_to_utterances[label]
+        is_noisy = [b for _, b in selected_utterances]
+        utterances = torch.stack([
+            torch.from_numpy(np.load(u).transpose()) for u, _ in selected_utterances
+        ])
+        return utterances, is_noisy
 
     @staticmethod
-    def collate_fn(batch: Sequence[Tuple[Tensor, bool, int, Path, Path]]):
+    def collate_fn(batch):
         return NotImplemented
 
 

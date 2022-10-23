@@ -9,7 +9,7 @@ from torch.cuda import is_available as cuda_is_available
 from torch.nn.functional import cosine_similarity
 
 from ..constant.config import DataConfig, TrainConfig
-from ..process_data.dataset import VOX2_CLASS_NUM, SpeakerUtteranceDataset
+from ..process_data.dataset import VOX2_CLASS_NUM, SpeakerLabelDataset
 from ..process_data.mislabel import find_mislabeled_json
 from ..utils import clean_memory
 from .beta_mixture import fit_bmm
@@ -37,15 +37,13 @@ def distance_inconsistency_evaluation(
     )
     if len(missing_keys) != 0 or len(unexpected_keys) != 0:
         raise ValueError()
-    dataset = SpeakerUtteranceDataset(
+    dataset = SpeakerLabelDataset(
         vox1_mel_spectrogram_dir, vox2_mel_spectrogram_dir, mislabeled_json_file,
     )
 
-    speaker_utterances: Dict[int, List[Tensor, bool]] = dict()
-    speaker_utterance_is_noisy: Dict[int, List[bool]] = dict()
-    for i in len(dataset):
-        mel, is_noisy, speaker_id, _, _ = dataset[i]
-        normalized_embedding = model.get_embedding(mel.to(device)).norm()
+    for i in range(len(dataset)):
+        mels, is_noisy, speaker_id, _, _ = dataset[i]
+        normalized_embedding = model.get_embedding(mels.to(device)).norm()
         try:
             speaker_utterances[speaker_id].append(normalized_embedding)
         except KeyError:
@@ -54,19 +52,3 @@ def distance_inconsistency_evaluation(
             speaker_utterance_is_noisy[speaker_id].append(is_noisy)
         except KeyError:
             speaker_utterance_is_noisy[speaker_id] = [is_noisy]
-
-    speaker_centroids = {
-        k: torch.stack([t for t in v]).mean(dim=0).norm()
-        for k, v in speaker_utterances.items()
-    }
-    speaker_utterances_distance: Dict[int, npt.NDArray] = {
-        k: np.fromiter((cosine_similarity(t, speaker_centroids[k]).item() for t in v), dtype=np.float32)
-        for k, v in speaker_utterances.items()
-    }
-
-    del speaker_utterances, speaker_centroids
-    clean_memory()
-
-    for speaker_id in speaker_utterances_distance.keys():
-        distances = speaker_utterances_distance[speaker_id]
-        is_noisy = speaker_utterance_is_noisy[speaker_id]
