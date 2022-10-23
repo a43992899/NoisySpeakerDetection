@@ -87,10 +87,14 @@ class AAMSoftmax(nn.Module):
         self.th = math.cos(math.pi - self.m)
         self.mm = math.sin(math.pi - self.m) * self.m
 
+    def directly_predict(self, x: Tensor):
+        cosine_theta = F.linear(F.normalize(x), F.normalize(self.weight))  # \cos_\theta
+        return cosine_theta
+
     def predict(self, x: Tensor, label: Tensor):
         assert x.size(0) == label.size(0)
         assert x.size(1) == self.in_feats
-        cosine_theta = F.linear(F.normalize(x), F.normalize(self.weight))  # \cos_\theta
+        cosine_theta = self.directly_predict(x)
         sine_theta = torch.sqrt((1.0 - torch.mul(cosine_theta, cosine_theta)).clamp(0, 1))  # \sin_\theta
         cos_theta_plus_m = cosine_theta * self.cos_m - sine_theta * self.sin_m  # \cos(\theta + m)
 
@@ -142,13 +146,17 @@ class SubcenterArcMarginProduct(nn.Module):
         self.mm = math.sin(math.pi - m) * m
         self.ce_loss = nn.CrossEntropyLoss()
 
-    def predict(self, x: Tensor, label: Tensor):
+    def directly_predict(self, x: Tensor):
         cosine = F.linear(F.normalize(x), F.normalize(self.weight))
 
         if self.K > 1:
             cosine = torch.reshape(cosine, (-1, self.out_features, self.K))
             cosine, _ = torch.max(cosine, axis=2)
+        
+        return cosine
 
+    def predict(self, x: Tensor, label: Tensor):
+        cosine = self.directly_predict(x)
         sine = torch.sqrt((1.0 - torch.mul(cosine, cosine)).clamp(0, 1))
         phi = cosine * self.cos_m - sine * self.sin_m
 

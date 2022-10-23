@@ -9,7 +9,7 @@ def nld_distance_main(args):
     model_dir: Path = args.model_dir
     selected_iterations: List[str] = args.selected_iterations
     if selected_iterations is None:
-        raise NotImplementedError()
+        selected_iterations = ['final']
     mislabeled_json_dir: Path = args.mislabeled_json_dir
     vox1_mel_spectrogram_dir: Path = args.vox1_mel_spectrogram_dir
     vox2_mel_spectrogram_dir: Path = args.vox2_mel_spectrogram_dir
@@ -26,14 +26,14 @@ def nld_confidence_main(args):
     model_dir: Path = args.model_dir
     selected_iterations: List[str] = args.selected_iterations
     if selected_iterations is None:
-        raise NotImplementedError()
+        selected_iterations = ['final']
     mislabeled_json_dir: Path = args.mislabeled_json_dir
     vox1_mel_spectrogram_dir: Path = args.vox1_mel_spectrogram_dir
     vox2_mel_spectrogram_dir: Path = args.vox2_mel_spectrogram_dir
     debug: bool = args.debug
 
     for iteration in selected_iterations:
-        distance_inconsistency_evaluation(
+        confidence_inconsistency_evaluation(
             model_dir, iteration, vox1_mel_spectrogram_dir,
             vox2_mel_spectrogram_dir, mislabeled_json_dir, debug
         )

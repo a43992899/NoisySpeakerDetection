@@ -15,6 +15,7 @@ from ..utils import clean_memory
 from .beta_mixture import fit_bmm
 
 
+@torch.no_grad()
 def distance_inconsistency_evaluation(
     model_dir: Path, selected_iteration: str, vox1_mel_spectrogram_dir: Path,
     vox2_mel_spectrogram_dir: Path, mislabeled_json_dir: Path, debug: bool,
@@ -29,26 +30,19 @@ def distance_inconsistency_evaluation(
         mislabeled_json_dir, train_config.noise_type, train_config.noise_level
     )
 
-    model = train_config.forge_model(
-        data_processing_config.nmels, VOX2_CLASS_NUM,
-    ).to(device).eval()
-    missing_keys, unexpected_keys = model.load_state_dict(
-        torch.load(model_dir / f'model-{selected_iteration}.pth')
-    )
-    if len(missing_keys) != 0 or len(unexpected_keys) != 0:
-        raise ValueError()
+    model = train_config.forge_model(data_processing_config.nmels, VOX2_CLASS_NUM).to(device).eval()
+    model.load_state_dict(torch.load(model_dir / f'model-{selected_iteration}.pth', map_location=device))
     dataset = SpeakerLabelDataset(
         vox1_mel_spectrogram_dir, vox2_mel_spectrogram_dir, mislabeled_json_file,
     )
 
+    speaker_id_data: Dict[int, Tuple[npt.NDArray[np.float32], npt.NDArray[np.bool8]]] = dict()
     for i in range(len(dataset)):
-        mels, is_noisy, speaker_id, _, _ = dataset[i]
-        normalized_embedding = model.get_embedding(mels.to(device)).norm()
-        try:
-            speaker_utterances[speaker_id].append(normalized_embedding)
-        except KeyError:
-            speaker_utterances[speaker_id] = [normalized_embedding]
-        try:
-            speaker_utterance_is_noisy[speaker_id].append(is_noisy)
-        except KeyError:
-            speaker_utterance_is_noisy[speaker_id] = [is_noisy]
+        utterances, is_noisy, _ = dataset[i]
+        embeddings: Tensor = model(utterances)
+        centroid = embeddings.mean(dim=0).norm(dim=-1)
+        distances = np.fromiter(
+            (torch.sum(centroid * embeddings[j, ...]).item() for j in embeddings.size(0)),
+            dtype=np.float32
+        )
+        speaker_id_data[i] = (distances, np.array(is_noisy))

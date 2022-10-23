@@ -180,7 +180,7 @@ class SpeakerLabelDataset(Dataset):
         utterances = torch.stack([
             torch.from_numpy(np.load(u).transpose()) for u, _ in selected_utterances
         ])
-        return utterances, is_noisy
+        return utterances, is_noisy, self.speaker_label_to_id[label]
 
     @staticmethod
     def collate_fn(batch):
