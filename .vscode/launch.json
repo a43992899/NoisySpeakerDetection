@@ -2,6 +2,20 @@
   "version": "0.2.0",
   "configurations": [
     {
+      "name": "NLD Distance",
+      "type": "python",
+      "request": "launch",
+      "program": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "justMyCode": true,
+      "args": [
+        "nld-confidence",
+        "data/training-models/Permute-50-CE-bs128-seed0",
+        "--selected-iterations",
+        "final"
+      ]
+    },
+    {
       "name": "Testing",
       "type": "python",
       "request": "launch",

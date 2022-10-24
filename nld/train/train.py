@@ -69,7 +69,7 @@ def train(
     scaler = GradScaler()
 
     if (restore_model := cfg.restore_model_from) and (restore_loss := cfg.restore_loss_from):
-        restore_model = Path(restore_model) 
+        restore_model = Path(restore_model)
         restore_loss = Path(restore_loss)
         missing_keys, unexpected_keys = embedder_net.load_state_dict(torch.load(restore_model))
         if len(missing_keys) != 0 or len(unexpected_keys) != 0:

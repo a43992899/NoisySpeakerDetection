@@ -152,7 +152,7 @@ class SubcenterArcMarginProduct(nn.Module):
         if self.K > 1:
             cosine = torch.reshape(cosine, (-1, self.out_features, self.K))
             cosine, _ = torch.max(cosine, axis=2)
-        
+
         return cosine
 
     def predict(self, x: Tensor, label: Tensor):
