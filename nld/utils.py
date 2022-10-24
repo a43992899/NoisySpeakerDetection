@@ -8,11 +8,16 @@ import numpy as np
 import numpy.typing as npt
 import torch
 import torch.autograd as grad
+from torch.cuda import is_available as cuda_is_avaliable
 from scipy.interpolate import interp1d
 from scipy.optimize import brentq
 from sklearn.metrics import roc_curve
 from torch.cuda import empty_cache as empty_cuda_cache
 from torch.cuda import is_available as cuda_is_available
+
+
+def get_device():
+    return torch.device('cuda' if cuda_is_available() else 'cpu')
 
 
 def clean_memory():
