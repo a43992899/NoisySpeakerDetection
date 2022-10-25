@@ -1,6 +1,5 @@
 import json
 from pathlib import Path
-from typing import List
 
 import numpy as np
 import torch
@@ -10,46 +9,9 @@ from tqdm.auto import tqdm
 
 from ..constant.config import DataConfig, TrainConfig
 from ..model.loss import AAMSoftmax, GE2ELoss, SubcenterArcMarginProduct
-from ..process_data.dataset import (VOX2_CLASS_NUM, SpeakerLabelDataset,
-                                    SpeakerUtteranceDataset)
+from ..process_data.dataset import (VOX2_CLASS_NUM, SpeakerLabelDataset)
 from ..process_data.mislabel import find_mislabeled_json
 from ..utils import clean_memory, get_device
-
-
-@torch.no_grad()
-def compute_and_save_ge2e_embedding_centroid(
-    model_dir: Path, selected_iteration: str, vox1_mel_spectrogram_dir: Path,
-    vox2_mel_spectrogram_dir: Path, mislabeled_json_dir: Path, debug: bool,
-):
-    """Pre-compute normalized embeddings centroid for GE2E."""
-    device = get_device()
-    train_config = TrainConfig.from_json(model_dir / 'config.json')
-    if (loss := train_config.loss) != 'GE2E':
-        print(f'This routine is specially designed for GE2E loss function. Got {loss}')
-        exit(1)
-    data_processing_config = DataConfig.from_json(
-        vox2_mel_spectrogram_dir / 'data-processing-config.json'
-    )
-    mislabeled_json_file = find_mislabeled_json(
-        mislabeled_json_dir, train_config.noise_type, train_config.noise_level
-    )
-
-    model = train_config.forge_model(data_processing_config.nmels, VOX2_CLASS_NUM).to(device).eval()
-    model.load_state_dict(torch.load(model_dir / f'model-{selected_iteration}.pth', map_location=device))
-    label_dataset = SpeakerLabelDataset(
-        vox1_mel_spectrogram_dir, vox2_mel_spectrogram_dir, mislabeled_json_file,
-    )
-
-    norm_centroids: List[Tensor] = []
-    for i in range(len(label_dataset)):
-        mel, _, label = label_dataset[i]
-        assert i == label
-        mel: Tensor = mel.to(device)
-        centroid = normalize(model.get_embedding(mel).mean(dim=0), dim=-1)
-        norm_centroids.append(centroid)
-    norm_centroids: Tensor = torch.stack(norm_centroids)
-
-    torch.save(norm_centroids, model_dir / f'ge2e-centroids-{selected_iteration}.pth')
 
 
 @torch.no_grad()
