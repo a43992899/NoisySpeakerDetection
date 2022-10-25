@@ -4,7 +4,7 @@ from typing import Any, Dict, List
 import torch
 from torch import Tensor
 from torch.nn.functional import normalize
-from tqdm.auto import tqdm
+from tqdm import tqdm
 
 from ..constant.config import DataConfig, TrainConfig
 from ..process_data.dataset import VOX2_CLASS_NUM, SpeakerLabelDataset
@@ -18,14 +18,13 @@ from .inconsistence import (compute_confidence_inconsistency,
 @torch.no_grad()
 def compute_and_save_ge2e_embedding_centroid(
     all_model_dir: Path, selected_iteration: str, vox1_mel_spectrogram_dir: Path,
-    vox2_mel_spectrogram_dir: Path, mislabeled_json_dir: Path, debug: bool,
+    vox2_mel_spectrogram_dir: Path, mislabeled_json_dir: Path
 ):
     """Pre-compute normalized embeddings centroid for GE2E."""
     device = get_device()
     data_processing_config = DataConfig.from_json(
         vox2_mel_spectrogram_dir / 'data-processing-config.json'
     )
-    model = train_config.forge_model(data_processing_config.nmels, VOX2_CLASS_NUM).to(device).eval()
 
     noise_dict: Dict[Any, List[Path]] = {
         ('Permute', 20): [],
@@ -64,15 +63,16 @@ def compute_and_save_ge2e_embedding_centroid(
         label_dataset = SpeakerLabelDataset(
             vox1_mel_spectrogram_dir, vox2_mel_spectrogram_dir, mislabeled_json_file,
         )
+        model = train_config.forge_model(data_processing_config.nmels, VOX2_CLASS_NUM).to(device).eval()
 
         tensors: Dict[Path, List[Tensor]] = dict()
         for i in tqdm(range(len(label_dataset)), total=len(label_dataset), desc=str(key)):
-            mel, _, label = label_dataset[j]
+            mel, _, label = label_dataset[i]
             assert i == label
             mel: Tensor = mel.to(device)
-            for j, model_dir in enumerate(model_dirs):
+            for model_dir in model_dirs:
                 model.load_state_dict(
-                    torch.load(all_model_dir / f'model-{selected_iteration}.pth', map_location=device)
+                    torch.load(model_dir / f'model-{selected_iteration}.pth', map_location=device)
                 )
                 centroid = normalize(model.get_embedding(mel).mean(dim=0), dim=-1)
                 try:
