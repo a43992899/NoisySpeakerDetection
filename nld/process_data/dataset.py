@@ -179,9 +179,9 @@ class SpeakerLabelDataset(Dataset):
         label = self.speaker_labels[i]
         selected_utterances = self.speaker_label_to_utterances[label]
         is_noisy = [b for _, b in selected_utterances]
-        utterances = torch.stack([
-            torch.from_numpy(np.load(u).transpose()) for u, _ in selected_utterances
-        ])
+        utterances = torch.from_numpy(
+            np.stack([np.load(u).transpose() for u, _ in selected_utterances])
+        )
         return utterances, is_noisy, self.speaker_label_to_id[label]
 
     @staticmethod

@@ -45,11 +45,11 @@ def compute_and_save_ge2e_embedding_centroid(
         mel, _, label = label_dataset[i]
         assert i == label
         mel: Tensor = mel.to(device)
-        centroid = normalize(model(mel).mean(dim=0), dim=0)
+        centroid = normalize(model.get_embedding(mel).mean(dim=0), dim=-1)
         norm_centroids.append(centroid)
     norm_centroids: Tensor = torch.stack(norm_centroids)
 
-    torch.save(norm_centroids, model_dir / 'ge2e-centroids.pth')
+    torch.save(norm_centroids, model_dir / f'ge2e-centroids-{selected_iteration}.pth')
 
 
 @torch.no_grad()
@@ -122,51 +122,45 @@ def compute_confidence_inconsistency(
     )
 
     clean_memory()
-    inconsistencies = []
-    noise = []
+    inconsistencies = np.array([], dtype=np.float32)
+    noise = np.array([], dtype=np.float32)
     if train_config.loss == 'GE2E':
         assert isinstance(criterion, GE2ELoss)
         w = criterion.w
         b = criterion.b
 
-        ge2e_centroid_file = model_dir / 'ge2e-centroids.pth'
+        ge2e_centroid_file = model_dir / f'ge2e-centroids-{selected_iteration}.pth'
         if not ge2e_centroid_file.exists() and not ge2e_centroid_file.is_file():
             raise RuntimeError(f'Can\'t find the saved GE2E embedding centroids.')
         norm_centroids: Tensor = torch.load(ge2e_centroid_file, map_location=device)
 
-        utterance_dataset = SpeakerUtteranceDataset(
-            vox1_mel_spectrogram_dir, vox2_mel_spectrogram_dir, mislabeled_json_file,
-        )
-        y = torch.eye(VOX2_CLASS_NUM).to(device)
-        # TODO: really no way to do this in batch?
-        for i in range(len(utterance_dataset)):
-            mel, is_noisy, selected_id, _, _ = utterance_dataset[i]
-            mel: Tensor = mel.to(device)
-            norm_embedding: Tensor = normalize(model(mel), dim=0)
-            all_similarities = w * (norm_centroids * norm_embedding).sum(dim=-1) + b
-            inconsistencies.append(
-                torch.max(y[selected_id, ...] * all_similarities).item()
+        for i in range(len(label_dataset)):
+            mels, is_noisy, selected_id = label_dataset[i]
+            mels: Tensor = mels.to(device)
+            norm_embedding: Tensor = normalize(model(mels), dim=-1)
+            all_similarities = w * (norm_embedding @ norm_centroids.T) + b
+            y = one_hot(torch.tensor(selected_id), VOX2_CLASS_NUM).to(device)
+            inconsistencies = np.concatenate(
+                [inconsistencies, torch.max(all_similarities * (1 - y), dim=-1)[0].detach().numpy()]
             )
-            noise.append(is_noisy)
+            noise = np.concatenate([noise, is_noisy])
     else:
         for i in tqdm(range(len(label_dataset))):
-            mel, is_noisy, label = label_dataset[i]
-            mel: Tensor = mel.to(device)
+            mels, is_noisy, label = label_dataset[i]
+            mels: Tensor = mels.to(device)
             y = one_hot(torch.tensor(label), VOX2_CLASS_NUM).to(device)
-            model_output: Tensor = model(mel)
+            model_output: Tensor = model(mels)
             if train_config.loss in ('AAM', 'AAMSC'):
                 assert isinstance(criterion, (AAMSoftmax, SubcenterArcMarginProduct))
                 model_output = criterion.directly_predict(model_output)
             model_output = softmax(model_output, dim=-1)
 
-            noise.extend(is_noisy)
-            inconsistencies.extend(
-                ((1 - y) * model_output[j, ...]).max().item() for j in range(model_output.size(0))
-            )
+            noise = np.concatenate([noise, is_noisy])
+            inconsistencies = np.concatenate([inconsistencies, np.fromiter(
+                (((1 - y) * model_output[j, ...]).max().item() for j in range(model_output.size(0))),
+                dtype=np.float32
+            )])
     clean_memory()
-
-    inconsistencies = np.array(inconsistencies)
-    noise = np.array(noise)
 
     return inconsistencies, noise
 
@@ -232,10 +226,10 @@ def compute_loss_inconsistency(
             losses = np.concatenate([losses, loss.detach().cpu().numpy()])
             if not noisy_collected:
                 noise = np.concatenate([noise, np.array(is_noisy)])
-        
+
         all_losses.append(loss)
         noisy_collected = True
-    
+
     all_losses = np.stack(all_losses)
     loss_mean = all_losses.mean(axis=0)
     loss_variance = all_losses.var(axis=0)
