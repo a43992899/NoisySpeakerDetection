@@ -2,10 +2,13 @@ import json
 from pathlib import Path
 
 import numpy as np
+import numpy.typing as npt
 import torch
 from torch import Tensor
-from torch.nn.functional import cross_entropy, normalize, one_hot, softmax
+from torch.nn.functional import cross_entropy, normalize, one_hot, softmax, cosine_similarity
 from tqdm.auto import tqdm
+
+from nld.nld.beta_mixture import fit_bmm
 
 from ..constant.config import DataConfig, TrainConfig
 from ..model.loss import AAMSoftmax, GE2ELoss, SubcenterArcMarginProduct
@@ -14,11 +17,20 @@ from ..process_data.mislabel import find_mislabeled_json
 from ..utils import clean_memory, get_device
 
 
+def compute_precision(ypreds: npt.NDArray, ylabels: npt.NDArray, noise_level: npt.NDArray):
+    selected_indices = np.argsort(ypreds)[-int(len(ypreds) * noise_level / 100):]
+    selected_ypreds = ypreds[selected_indices]
+    selected_ylabels = ylabels[selected_indices]
+    # compute precision
+    return selected_ylabels.sum() / len(selected_ylabels)
+
+
 @torch.no_grad()
 def compute_distance_inconsistency(
     model_dir: Path, selected_iteration: str, vox1_mel_spectrogram_dir: Path,
     vox2_mel_spectrogram_dir: Path, mislabeled_json_dir: Path, debug: bool,
 ):
+    print(f'{model_dir = }')
     device = get_device()
     train_config = TrainConfig.from_json(model_dir / 'config.json')
     data_processing_config = DataConfig.from_json(
@@ -42,14 +54,28 @@ def compute_distance_inconsistency(
         assert label == i
         utterances = utterances.to(device)
         embeddings: Tensor = model.get_embedding(utterances)
-        centroid_norm = normalize(embeddings.mean(dim=0), dim=0)
-        inconsistencies = np.concatenate([inconsistencies, np.fromiter(
-            ((centroid_norm * normalize(embeddings[j, :], dim=0)).sum().item() for j in range(embeddings.size(0))),
-            dtype=np.float32
-        )])
+        centroid_norm = normalize(embeddings.mean(dim=0), dim=-1)
+        embeddings_norm = normalize(embeddings, dim=-1)
+        inconsistencies = np.concatenate([
+            inconsistencies,
+            (embeddings_norm @ centroid_norm.unsqueeze(-1)).flatten().cpu().numpy()
+        ])
         noise = np.concatenate([noise, np.array(is_noisy)])
+        if i == 20:
+            break
 
-    return inconsistencies, noise
+    precision = compute_precision(inconsistencies, noise, train_config.noise_level)
+
+    bmm_model, bmm_model_max, bmm_model_min = fit_bmm(inconsistencies, max_iters=50, rm_outliers=True)
+    if train_config.noise_level >= 70:
+        estimated_noise_level = bmm_model.weight[0]
+    else:
+        estimated_noise_level = bmm_model.weight[1]
+    print(f'{bmm_model.weight = }')
+    print(f'{precision = }')
+    print(f'{estimated_noise_level = }')
+
+    # return inconsistencies, noise
 
 
 @torch.no_grad()

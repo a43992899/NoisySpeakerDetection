@@ -149,7 +149,7 @@ class SpeakerLabelDataset(Dataset):
         with open(main_mel_spectrogram_dir / 'speaker-label-to-id.json', 'r') as f:
             self.speaker_label_to_id: Dict[str, int] = json.load(f)
         self.speaker_labels = sorted(self.speaker_label_to_id.keys())
-        self.speaker_label_to_utterances = {k: [] for k in self.speaker_label_to_id.keys()}
+        self.speaker_label_to_utterances = {label: [] for label in self.speaker_labels}
 
         for p in main_mel_spectrogram_dir.iterdir():
             if not p.suffix == '.npy':

@@ -10,7 +10,7 @@
       "justMyCode": true,
       "args": [
         "nld-confidence",
-        "data/training-models/Permute-50-CE-bs128-seed0",
+        "data/training-models/clean-GE2E-bs128-M4-seed0",
         "--selected-iterations",
         "final"
       ]

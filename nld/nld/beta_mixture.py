@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import numpy.typing as npt
 import scipy.stats as stats
+import torch
 
 
 def weighted_mean(x: npt.ArrayLike, w: npt.ArrayLike):
@@ -133,3 +134,31 @@ def fit_bmm(data: npt.NDArray, normalization=True, rm_outliers=False, max_iters=
     bmm_model.create_lookup(1)
 
     return bmm_model, bmm_model_max, bmm_model_min
+
+
+# def temp(bmm_model: BetaMixture1D, inconsistencies: npt.NDArray, device: torch.device):
+#     inconsistencies_tr = inconsistencies.data.numpy()
+
+#     # outliers detection
+#     max_perc = np.percentile(inconsistencies_tr, 95)
+#     min_perc = np.percentile(inconsistencies_tr, 5)
+#     inconsistencies_tr = inconsistencies_tr[(inconsistencies_tr <= max_perc) & (inconsistencies_tr >= min_perc)]
+
+#     bmm_model_maxLoss = torch.FloatTensor([max_perc]).to(device)
+#     bmm_model_minLoss = torch.FloatTensor([min_perc]).to(device) + 10e-6
+
+#     inconsistencies_tr = (inconsistencies_tr - bmm_model_minLoss.data.cpu().numpy()) / (
+#         bmm_model_maxLoss.data.cpu().numpy() - bmm_model_minLoss.data.cpu().numpy() + 1e-6)
+
+#     inconsistencies_tr[inconsistencies_tr >= 1] = 1 - 10e-4
+#     inconsistencies_tr[inconsistencies_tr <= 0] = 10e-4
+
+#     bmm_model = BetaMixture1D(max_iters=10)
+#     bmm_model.fit(inconsistencies_tr)
+
+#     bmm_model.create_lookup(1)
+
+#     return inconsistencies.data.numpy(), \
+#            all_probs.data.numpy(), \
+#            all_argmaxXentropy.numpy(), \
+#            bmm_model, bmm_model_maxLoss, bmm_model_minLoss
