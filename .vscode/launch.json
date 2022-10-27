@@ -2,15 +2,15 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "NLD Distance",
+      "name": "NLD",
       "type": "python",
       "request": "launch",
       "program": "${workspaceFolder}",
       "console": "integratedTerminal",
       "justMyCode": true,
       "args": [
-        "nld-confidence",
-        "data/training-models/clean-GE2E-bs128-M4-seed0",
+        "nld-distance",
+        "data/training-models/Permute-20-GE2E-bs256-M8-seed0",
         "--selected-iterations",
         "final"
       ]

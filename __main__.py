@@ -3,7 +3,7 @@ from pathlib import Path
 
 from nld.constant.config import LOSSES, NOISE_LEVELS, NOISE_TYPES, OPTIMIZERS
 from nld.constant.defaults import *
-from nld.nld import nld_distance_main, nld_loss_main
+from nld.nld import nld_distance_main, nld_loss_main, nld_confidence_main
 from nld.process_data import produce_mel_spectrogram, produce_noisy_label
 from nld.train import test_main, train_main
 
@@ -101,8 +101,17 @@ nld_distance_parser.add_argument('--vox1-mel-spectrogram-dir', default=DEFAULT_V
 nld_distance_parser.add_argument('--vox2-mel-spectrogram-dir', default=DEFAULT_VOX2_MEL_SPECTROGRAM_DIR, type=Path)
 nld_distance_parser.add_argument('-d', '--debug', action='store_true')
 
+nld_distance_parser = main_subparser.add_parser('nld-distance')
+nld_distance_parser.set_defaults(main_func=nld_distance_main)
+nld_distance_parser.add_argument('model_dir', type=Path)
+nld_distance_parser.add_argument('--selected-iterations', type=str, nargs='*')
+nld_distance_parser.add_argument('--mislabeled-json-dir', default=DEFAULT_VOXCELEB_MISLABELED_JSON_DIR, type=Path)
+nld_distance_parser.add_argument('--vox1-mel-spectrogram-dir', default=DEFAULT_VOX1_MEL_SPECTROGRAM_DIR, type=Path)
+nld_distance_parser.add_argument('--vox2-mel-spectrogram-dir', default=DEFAULT_VOX2_MEL_SPECTROGRAM_DIR, type=Path)
+nld_distance_parser.add_argument('-d', '--debug', action='store_true')
+
 nld_confidence_parser = main_subparser.add_parser('nld-confidence')
-nld_confidence_parser.set_defaults(main_func=nld_distance_main)
+nld_confidence_parser.set_defaults(main_func=nld_confidence_main)
 nld_confidence_parser.add_argument('model_dir', type=Path)
 nld_confidence_parser.add_argument('--selected-iterations', type=str, nargs='*')
 nld_confidence_parser.add_argument('--mislabeled-json-dir', default=DEFAULT_VOXCELEB_MISLABELED_JSON_DIR, type=Path)

@@ -12,7 +12,7 @@ from nld.nld.beta_mixture import fit_bmm
 
 from ..constant.config import DataConfig, TrainConfig
 from ..model.loss import AAMSoftmax, GE2ELoss, SubcenterArcMarginProduct
-from ..process_data.dataset import (VOX2_CLASS_NUM, SpeakerLabelDataset)
+from ..process_data.dataset import (VOX2_CLASS_NUM, SpeakerDataset2)
 from ..process_data.mislabel import find_mislabeled_json
 from ..utils import clean_memory, get_device
 
@@ -42,16 +42,16 @@ def compute_distance_inconsistency(
 
     model = train_config.forge_model(data_processing_config.nmels, VOX2_CLASS_NUM).to(device).eval()
     model.load_state_dict(torch.load(model_dir / f'model-{selected_iteration}.pth', map_location=device))
-    label_dataset = SpeakerLabelDataset(
-        vox1_mel_spectrogram_dir, vox2_mel_spectrogram_dir, mislabeled_json_file,
+    dataset = SpeakerDataset2(
+        -1, vox1_mel_spectrogram_dir, vox2_mel_spectrogram_dir, mislabeled_json_file,
     )
 
     clean_memory()
     inconsistencies = np.array([], dtype=np.float32)
     noise = np.array([], dtype=np.bool8)
-    for i in tqdm(range(len(label_dataset)), total=len(label_dataset), desc='Evaluating centroids and distances...'):
-        utterances, is_noisy, label = label_dataset[i]
-        assert label == i
+    for i in tqdm(range(len(dataset)), total=len(dataset), desc='Evaluating centroids and distances...'):
+        utterances, is_noisy, label, corrupted_files, clean_files = dataset[i]
+        tmp = list(zip(corrupted_files, clean_files, is_noisy))
         utterances = utterances.to(device)
         embeddings: Tensor = model.get_embedding(utterances)
         centroid_norm = normalize(embeddings.mean(dim=0), dim=-1)
@@ -61,7 +61,7 @@ def compute_distance_inconsistency(
             (embeddings_norm @ centroid_norm.unsqueeze(-1)).flatten().cpu().numpy()
         ])
         noise = np.concatenate([noise, np.array(is_noisy)])
-        if i == 20:
+        if i == 0:
             break
 
     precision = compute_precision(inconsistencies, noise, train_config.noise_level)
