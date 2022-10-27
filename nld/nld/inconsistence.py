@@ -48,23 +48,22 @@ def compute_distance_inconsistency(
 
     clean_memory()
     inconsistencies = np.array([], dtype=np.float32)
-    noise = np.array([], dtype=np.bool8)
+    is_noisies = np.array([], dtype=np.bool8)
     for i in tqdm(range(len(dataset)), total=len(dataset), desc='Evaluating centroids and distances...'):
-        utterances, is_noisy, label, corrupted_files, clean_files = dataset[i]
-        tmp = list(zip(corrupted_files, clean_files, is_noisy))
+        utterances, is_noisy, label, corrupted_files, _ = dataset[i]
         utterances = utterances.to(device)
         embeddings: Tensor = model.get_embedding(utterances)
         centroid_norm = normalize(embeddings.mean(dim=0), dim=-1)
         embeddings_norm = normalize(embeddings, dim=-1)
         inconsistencies = np.concatenate([
             inconsistencies,
-            (embeddings_norm @ centroid_norm.unsqueeze(-1)).flatten().cpu().numpy()
+            1 - (embeddings_norm @ centroid_norm.unsqueeze(-1)).flatten().cpu().numpy()
         ])
-        noise = np.concatenate([noise, np.array(is_noisy)])
-        if i == 0:
+        is_noisies = np.concatenate([is_noisies, np.array(is_noisy)])
+        if i == 10:
             break
 
-    precision = compute_precision(inconsistencies, noise, train_config.noise_level)
+    precision = compute_precision(inconsistencies, is_noisies, train_config.noise_level)
 
     bmm_model, bmm_model_max, bmm_model_min = fit_bmm(inconsistencies, max_iters=50, rm_outliers=True)
     if train_config.noise_level >= 70:
@@ -75,7 +74,7 @@ def compute_distance_inconsistency(
     print(f'{precision = }')
     print(f'{estimated_noise_level = }')
 
-    # return inconsistencies, noise
+    return inconsistencies, noise
 
 
 @torch.no_grad()

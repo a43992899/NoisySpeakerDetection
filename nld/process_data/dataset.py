@@ -3,6 +3,7 @@ import random, os, copy
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Tuple
 
+from numba import jit
 import numpy as np
 import torch
 from torch import Tensor
@@ -339,21 +340,29 @@ class SpeakerDataset2(Dataset):
             self.spkr_name2utter[spkr_name].append(utter_file)
 
             # get spkr_name2utter_mislabel
-            if self.mislabel_mapper is not None and utter_file.name in self.mislabel_mapper:
-                assert self.ood_mel_dir is not None
-                mislabel_file_or_label = self.mislabel_mapper[utter_file.name]
-                if mislabel_file_or_label.endswith('.npy'):  # Is a file. Is the open noise
-                    mislabel_file = self.ood_mel_dir / mislabel_file_or_label
-                    if mislabel_file not in self.spkr_name2utter_mislabel:
+            if self.mislabel_mapper is not None:
+                if utter_file.name in self.mislabel_mapper:
+                    mislabel_file_or_label = self.mislabel_mapper[utter_file.name]
+                    if mislabel_file_or_label.endswith('.npy'):  # Is a file. Is the open noise
+                        assert self.ood_mel_dir is not None
+                        mislabel_file = self.ood_mel_dir / mislabel_file_or_label
+                        if mislabel_file not in self.spkr_name2utter_mislabel:
+                            self.spkr_name2utter_mislabel[spkr_name] = []
+                        self.spkr_name2utter_mislabel[spkr_name].append(mislabel_file)
+                    else:  # Is a label. Is the permute noise
+                        mislabel_spkr_name = mislabel_file_or_label
+                        if mislabel_spkr_name not in self.spkr_name2utter_mislabel:
+                            self.spkr_name2utter_mislabel[mislabel_spkr_name] = []
+                        self.spkr_name2utter_mislabel[mislabel_spkr_name].append(utter_file)
+                else:
+                    if spkr_name not in self.spkr_name2utter_mislabel:
                         self.spkr_name2utter_mislabel[spkr_name] = []
-                    self.spkr_name2utter_mislabel[spkr_name].append(mislabel_file)
-                else:  # Is a label. Is the permute noise
-                    mislabel_spkr_name = mislabel_file_or_label
-                    if mislabel_spkr_name not in self.spkr_name2utter_mislabel:
-                        self.spkr_name2utter_mislabel[mislabel_spkr_name] = []
-                    self.spkr_name2utter_mislabel[mislabel_spkr_name].append(utter_file)
-            else:
-                self.spkr_name2utter_mislabel = None
+                    self.spkr_name2utter_mislabel[spkr_name].append(utter_file)
+
+        if self.mislabel_mapper is None:
+            self.spkr_name2utter_mislabel = None
+        else:
+            assert len(self.spkr_name2utter_mislabel) == len(self.spkr_name2utter)
 
         assert len(self.spkr_name2utter) == len(self.spkr_name2id)
 
@@ -367,7 +376,7 @@ class SpeakerDataset2(Dataset):
         else:
             all_utters_of_selected_spkr = self.spkr_name2utter_mislabel[selected_spkr]
 
-        if self.sample_num != 'all':
+        if self.sample_num != -1:
             selected_utter_paths = random.sample(all_utters_of_selected_spkr, self.sample_num)
         else:
             selected_utter_paths = all_utters_of_selected_spkr
