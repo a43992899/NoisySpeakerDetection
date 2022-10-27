@@ -191,7 +191,7 @@ class SpeakerUtteranceDataset(Dataset):
 #         return NotImplemented
 
 
-class SpeakerDataset(Dataset):
+class SpeakerDataset_to_delete(Dataset):
     sample_num: int
     noise_mel_spectrogram_dir: Optional[Path]
     main_mel_spectrogram_dir: Path
@@ -289,7 +289,7 @@ class SpeakerDataset(Dataset):
         )
 
 
-class SpeakerDataset2(Dataset):
+class SpeakerDataset(Dataset):
     sample_num: int
     ood_mel_dir: Optional[Path]
     main_mel_dir: Path

@@ -42,7 +42,7 @@ def compute_distance_inconsistency(
 
     model = train_config.forge_model(data_processing_config.nmels, VOX2_CLASS_NUM).to(device).eval()
     model.load_state_dict(torch.load(model_dir / f'model-{selected_iteration}.pth', map_location=device))
-    dataset = SpeakerDataset2(
+    dataset = SpeakerDataset(
         -1, vox1_mel_spectrogram_dir, vox2_mel_spectrogram_dir, mislabeled_json_file,
     )
 
