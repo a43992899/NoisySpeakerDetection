@@ -39,12 +39,13 @@ def train_main(args):
     )
     debug: bool = args.debug
     save_interval: int = args.save_interval
+    cuda_device_index: int = args.cuda_device_index
 
     mislabeled_json_file = find_mislabeled_json(mislabeled_json_dir, cfg.noise_type, cfg.noise_level)
 
     train(
         cfg, mislabeled_json_file, vox1_mel_spectrogram_dir, vox2_mel_spectrogram_dir,
-        training_model_save_dir, save_interval, debug
+        training_model_save_dir, save_interval, cuda_device_index, debug
     )
 
 

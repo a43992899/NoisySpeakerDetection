@@ -63,6 +63,7 @@ train_parser.add_argument('--random-seed', default=DEFAULT_RANDOM_SEED, type=int
 train_parser.add_argument('--restore-model-from', default='', type=str)
 train_parser.add_argument('--restore-loss-from', default='', type=str)
 # The following args won't be saved to config
+train_parser.add_argument('--cuda-device-index', type=int, default=0)
 train_parser.add_argument('--save-interval', default=DEFAULT_SAVING_INTERVAL, type=int)
 train_parser.add_argument('--training-model-save-dir', default=DEFAULT_TRAINING_MODEL_DIR, type=Path)
 train_parser.add_argument('--mislabeled-json-dir', default=DEFAULT_VOXCELEB_MISLABELED_JSON_DIR, type=Path)

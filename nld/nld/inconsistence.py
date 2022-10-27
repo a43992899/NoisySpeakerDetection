@@ -60,7 +60,7 @@ def compute_distance_inconsistency(
             1 - (embeddings_norm @ centroid_norm.unsqueeze(-1)).flatten().cpu().numpy()
         ])
         is_noisies = np.concatenate([is_noisies, np.array(is_noisy)])
-        if i == 10:
+        if i == 20:
             break
 
     precision = compute_precision(inconsistencies, is_noisies, train_config.noise_level)

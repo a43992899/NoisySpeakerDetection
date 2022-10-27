@@ -15,15 +15,17 @@ from ..constant.config import DataConfig, TestConfig, TrainConfig
 from ..constant.entities import (WANDB_ENTITY, WANDB_TESTING_PROJECT_NAME,
                                  WANDB_TRAINING_PROJECT_NAME)
 from ..process_data.dataset import VOX2_CLASS_NUM, SpeakerDataset
-from ..utils import clean_memory, compute_eer, set_random_seed_to
+from ..utils import clean_memory, compute_eer, set_random_seed_to, get_device
 
 
 def train(
-    cfg: TrainConfig, mislabeled_json_file: Optional[Path], vox1_mel_spectrogram_dir: Path,
-    vox2_mel_spectrogram_dir: Path, training_model_save_dir: Path, save_interval: int, debug: bool
+    cfg: TrainConfig, mislabeled_json_file: Optional[Path],
+    vox1_mel_spectrogram_dir: Path, vox2_mel_spectrogram_dir: Path,
+    training_model_save_dir: Path, save_interval: int,
+    cuda_device_index: int, debug: bool
 ):
     set_random_seed_to(cfg.random_seed)
-    device = torch.device('cuda' if cuda_is_available() else 'cpu')
+    device = get_device(cuda_device_index)
 
     if not debug:
         wandb.init(
