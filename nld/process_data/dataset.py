@@ -287,7 +287,16 @@ class SpeakerDataset(Dataset):
             [b[4] for b in batch],
         )
 
+
 class SpeakerDataset2(Dataset):
+    sample_num: int
+    ood_mel_dir: Optional[Path]
+    main_mel_dir: Path
+    mislabel_mapper: Optional[Dict[str, str]]
+
+    spkr_name2utter: Dict[str, List[Path]]
+    spkr_name2utter_mislabel: Optional[Dict[str, List[Path]]]
+
     def __init__(
         self, sample_num: int, ood_mel_dir: Optional[Path],
         main_mel_dir: Path, mislabel_json: Optional[Path]
@@ -306,18 +315,18 @@ class SpeakerDataset2(Dataset):
         else:
             self.mislabel_mapper = None
         self.get_spkr2utter()
-        
+
     def get_spkr2utter(self):
         """
         This function is used to get the correct and mislabeled spkr2utter dict
         spkr2utter format: {speaker_id: [file_name, ...]}, where file_name is all from the same speaker
-        spkr2utter_mislabel format: {speaker_id: [file_name, ...]}, where some of the file_name are not from the corresponding speaker
+        spkr2utter_mislabel format: {speaker_id: [file_name, ...]},
+        where some of the file_name are not from the corresponding speaker
         """
         self.spkr_name2utter = dict()
         self.spkr_name2utter_mislabel = dict()
 
-        main_mel_fl = os.listdir(self.main_mel_dir)
-        main_mel_fl.sort()
+        main_mel_fl = sorted(os.listdir(self.main_mel_dir))
         for utter_file in tqdm(main_mel_fl, desc='Loading spkr_name2utter and spkr_name2utter_mislabel...'):
             utter_file = self.main_mel_dir / Path(utter_file)
             if not utter_file.suffix == '.npy':
@@ -328,27 +337,25 @@ class SpeakerDataset2(Dataset):
             if spkr_name not in self.spkr_name2utter:
                 self.spkr_name2utter[spkr_name] = []
             self.spkr_name2utter[spkr_name].append(utter_file)
-            
+
             # get spkr_name2utter_mislabel
             if self.mislabel_mapper is not None and utter_file.name in self.mislabel_mapper:
+                assert self.ood_mel_dir is not None
                 mislabel_file_or_label = self.mislabel_mapper[utter_file.name]
-                if mislabel_file_or_label.endswith('.npy'): # is a file
-                    assert self.ood_mel_dir is not None
+                if mislabel_file_or_label.endswith('.npy'):  # Is a file. Is the open noise
                     mislabel_file = self.ood_mel_dir / mislabel_file_or_label
                     if mislabel_file not in self.spkr_name2utter_mislabel:
                         self.spkr_name2utter_mislabel[spkr_name] = []
                     self.spkr_name2utter_mislabel[spkr_name].append(mislabel_file)
-                else: # is a label
+                else:  # Is a label. Is the permute noise
                     mislabel_spkr_name = mislabel_file_or_label
                     if mislabel_spkr_name not in self.spkr_name2utter_mislabel:
                         self.spkr_name2utter_mislabel[mislabel_spkr_name] = []
                     self.spkr_name2utter_mislabel[mislabel_spkr_name].append(utter_file)
+            else:
+                self.spkr_name2utter_mislabel = None
 
-        if self.mislabel_mapper is None:
-            self.spkr_name2utter_mislabel = None
-            
         assert len(self.spkr_name2utter) == len(self.spkr_name2id)
-        assert len(self.spkr_name2utter_mislabel) == len(self.spkr_name2id)
 
     def __len__(self):
         return len(self.spkr_name2id)
@@ -368,24 +375,19 @@ class SpeakerDataset2(Dataset):
         selected_len = len(selected_utter_paths)
         selected_mels, selected_ids, is_noisy, selected_utter_names = [], [], [], []
         for i in range(selected_len):
-            mel = np.load(selected_utter_paths[i])
+            mel = np.load(selected_utter_paths[i]).T
             selected_mels.append(mel)
             selected_ids.append(idx)
             utter_spkr_name = selected_utter_paths[i].stem.split('-')[0]
-            
-            
-            
+            is_noisy.append(utter_spkr_name != selected_spkr)
+            selected_utter_names.append(selected_utter_paths[i].name)
 
-        selected_id = [self.spkr_name2id[label] for label in selected_labels]
-
-        selected_mel = np.stack([
-            np.load(file).transpose() for file in selected_utter_paths
-        ])
+        selected_mels = np.stack(selected_mels)
 
         return (
-            torch.from_numpy(selected_mel),
+            torch.from_numpy(selected_mels),
             torch.tensor(is_noisy),
-            torch.tensor(selected_id),
+            torch.tensor(selected_ids),
             selected_utter_paths,
             None,
         )
