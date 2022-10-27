@@ -7,7 +7,7 @@ from torch.nn.functional import normalize
 from tqdm import tqdm
 
 from ..constant.config import DataConfig, TrainConfig
-from ..process_data.dataset import VOX2_CLASS_NUM, SpeakerDataset2
+from ..process_data.dataset import VOX2_CLASS_NUM, SpeakerDataset
 from ..process_data.mislabel import find_mislabeled_json
 from ..utils import get_device
 from .inconsistence import (compute_confidence_inconsistency,

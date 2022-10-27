@@ -12,7 +12,7 @@ from nld.nld.beta_mixture import fit_bmm
 
 from ..constant.config import DataConfig, TrainConfig
 from ..model.loss import AAMSoftmax, GE2ELoss, SubcenterArcMarginProduct
-from ..process_data.dataset import (VOX2_CLASS_NUM, SpeakerDataset2)
+from ..process_data.dataset import (VOX2_CLASS_NUM, SpeakerDataset)
 from ..process_data.mislabel import find_mislabeled_json
 from ..utils import clean_memory, get_device
 
