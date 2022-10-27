@@ -13,52 +13,14 @@ from tqdm import tqdm
 VOX2_CLASS_NUM = 5994
 
 
-def iterate_speaker_utterance(
-    noise_mel_spectrogram_dir: Optional[Path],
-    main_mel_spectrogram_dir: Path,
-    mislabeled_json_file: Optional[Path],
-):
-    with open(main_mel_spectrogram_dir / 'speaker-label-to-id.json', 'r') as f:
-        speaker_label_to_id: Dict[str, int] = json.load(f)
-    if mislabeled_json_file is not None:
-        with open(mislabeled_json_file, 'r') as f:
-            mislabeled_mapping: Dict[str, str] = json.load(f)
-    else:
-        mislabeled_mapping = None
-
-    for original_utterance_path in main_mel_spectrogram_dir.iterdir():
-        if original_utterance_path.suffix != '.npy':
-            continue
-
-        original_speaker_label = original_utterance_path.name.split('-')[0]
-        try:
-            mislabeled = mislabeled_mapping[original_speaker_label]
-            is_noisy = True
-            if mislabeled.endswith('.npy'):
-                tainted_utterance_path = noise_mel_spectrogram_dir / mislabeled
-                spectrogram = np.load(tainted_utterane_path).transpose()
-                label = original_speaker_label
-            else:
-                tainted_utterance_path = original_utterance_path
-                spectrogram = np.load(original_utterance_path).transpose()
-                label = mislabeled
-        except (TypeError, LookupError):
-            is_noisy = False
-            tainted_utterane_path = original_utterance_path
-            spectrogram = np.load(original_utterance_path).transpose()
-            label = original_speaker_label
-
-        selected_id = speaker_label_to_id[label]
-
-        yield torch.from_numpy(spectrogram), is_noisy, selected_id, tainted_utterance_path, original_utterance_path
-
-
 class SpeakerDataset(Dataset):
     sample_num: int
     ood_mel_dir: Optional[Path]
     main_mel_dir: Path
     mislabel_mapper: Optional[Dict[str, str]]
 
+    spkr_name2id: Dict[str, int]
+    spkr_id2name: Dict[int, str]
     spkr_name2utter: Dict[str, List[Path]]
     spkr_name2utter_mislabel: Optional[Dict[str, List[Path]]]
 
