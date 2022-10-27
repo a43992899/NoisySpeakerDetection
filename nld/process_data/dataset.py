@@ -346,7 +346,7 @@ class SpeakerDataset(Dataset):
                     if mislabel_file_or_label.endswith('.npy'):  # Is a file. Is the open noise
                         assert self.ood_mel_dir is not None
                         mislabel_file = self.ood_mel_dir / mislabel_file_or_label
-                        if mislabel_file not in self.spkr_name2utter_mislabel:
+                        if spkr_name not in self.spkr_name2utter_mislabel:
                             self.spkr_name2utter_mislabel[spkr_name] = []
                         self.spkr_name2utter_mislabel[spkr_name].append(mislabel_file)
                     else:  # Is a label. Is the permute noise
@@ -397,7 +397,7 @@ class SpeakerDataset(Dataset):
             torch.from_numpy(selected_mels),
             torch.tensor(is_noisy),
             torch.tensor(selected_ids),
-            selected_utter_paths,
+            selected_utter_names,
             None,
         )
 

@@ -50,9 +50,9 @@ def compute_distance_inconsistency(
     inconsistencies = np.array([], dtype=np.float32)
     is_noisies = np.array([], dtype=np.bool8)
     for i in tqdm(range(len(dataset)), total=len(dataset), desc='Evaluating centroids and distances...'):
-        utterances, is_noisy, label, corrupted_files, _ = dataset[i]
-        utterances = utterances.to(device)
-        embeddings: Tensor = model.get_embedding(utterances)
+        mels, is_noisy, label, corrupted_files, _ = dataset[i]
+        mels = mels.to(device)
+        embeddings: Tensor = model.get_embedding(mels)
         centroid_norm = normalize(embeddings.mean(dim=0), dim=-1)
         embeddings_norm = normalize(embeddings, dim=-1)
         inconsistencies = np.concatenate([
@@ -60,21 +60,20 @@ def compute_distance_inconsistency(
             1 - (embeddings_norm @ centroid_norm.unsqueeze(-1)).flatten().cpu().numpy()
         ])
         is_noisies = np.concatenate([is_noisies, np.array(is_noisy)])
-        if i == 20:
-            break
+        # log every 100 speakers
+        if i % 100 == 0:
+            precision = compute_precision(inconsistencies, is_noisies, train_config.noise_level)
+            print(f'{i = }, {precision = :.4f}')
 
     precision = compute_precision(inconsistencies, is_noisies, train_config.noise_level)
 
-    bmm_model, bmm_model_max, bmm_model_min = fit_bmm(inconsistencies, max_iters=50, rm_outliers=True)
-    if train_config.noise_level >= 70:
-        estimated_noise_level = bmm_model.weight[0]
-    else:
-        estimated_noise_level = bmm_model.weight[1]
+    bmm_model, bmm_model_max, bmm_model_min = fit_bmm(inconsistencies, max_iters=10, rm_outliers=True)
+    estimated_noise_level = bmm_model.weight[1]
     print(f'{bmm_model.weight = }')
-    print(f'{precision = }')
     print(f'{estimated_noise_level = }')
+    print(f'{precision = }')
 
-    return inconsistencies, noise
+    return inconsistencies, is_noisies
 
 
 @torch.no_grad()
@@ -103,14 +102,15 @@ def compute_confidence_inconsistency(
     criterion.load_state_dict(torch.load(
         model_dir / f'loss-{selected_iteration}.pth', map_location=device,
     ))
+    criterion.eval()
 
-    label_dataset = SpeakerLabelDataset(
-        vox1_mel_spectrogram_dir, vox2_mel_spectrogram_dir, mislabeled_json_file
+    dataset = SpeakerDataset(
+        -1, vox1_mel_spectrogram_dir, vox2_mel_spectrogram_dir, mislabeled_json_file,
     )
 
     clean_memory()
     inconsistencies = np.array([], dtype=np.float32)
-    noise = np.array([], dtype=np.float32)
+    is_noisies = np.array([], dtype=np.float32)
     if train_config.loss == 'GE2E':
         assert isinstance(criterion, GE2ELoss)
         w = criterion.w
@@ -121,35 +121,49 @@ def compute_confidence_inconsistency(
             raise RuntimeError(f'Can\'t find the saved GE2E embedding centroids.')
         norm_centroids: Tensor = torch.load(ge2e_centroid_file, map_location=device)
 
-        for i in range(len(label_dataset)):
-            mels, is_noisy, selected_id = label_dataset[i]
-            mels: Tensor = mels.to(device)
+        for i in range(len(dataset)):
+            mels, is_noisy, label, corrupted_files, _ = dataset[i]
+            mels = mels.to(device)
             norm_embedding: Tensor = normalize(model(mels), dim=-1)
             all_similarities = w * (norm_embedding @ norm_centroids.T) + b
-            y = one_hot(torch.tensor(selected_id), VOX2_CLASS_NUM).to(device)
+            y = one_hot(torch.tensor(label), VOX2_CLASS_NUM).to(device)
             inconsistencies = np.concatenate(
                 [inconsistencies, torch.max(all_similarities * (1 - y), dim=-1)[0].detach().numpy()]
             )
-            noise = np.concatenate([noise, is_noisy])
+            is_noisies = np.concatenate([is_noisies, is_noisy])
+            # log every 100 speakers
+            if i % 100 == 0:
+                precision = compute_precision(inconsistencies, is_noisies, train_config.noise_level)
+                print(f'{i = }, {precision = :.4f}')
     else:
-        for i in tqdm(range(len(label_dataset))):
-            mels, is_noisy, label = label_dataset[i]
+        for i in tqdm(range(len(dataset))):
+            mels, is_noisy, label, corrupted_files, _ = dataset[i]
             mels: Tensor = mels.to(device)
             y = one_hot(torch.tensor(label), VOX2_CLASS_NUM).to(device)
-            model_output: Tensor = model(mels)
+            model_output: Tensor = model(mels, logsoftmax=False)
             if train_config.loss in ('AAM', 'AAMSC'):
                 assert isinstance(criterion, (AAMSoftmax, SubcenterArcMarginProduct))
                 model_output = criterion.directly_predict(model_output)
-            model_output = softmax(model_output, dim=-1)
+                model_output = softmax(model_output, dim=-1)
 
-            noise = np.concatenate([noise, is_noisy])
-            inconsistencies = np.concatenate([inconsistencies, np.fromiter(
-                (((1 - y) * model_output[j, ...]).max().item() for j in range(model_output.size(0))),
-                dtype=np.float32
-            )])
-    clean_memory()
+            is_noisies = np.concatenate([is_noisies, is_noisy])
+            # inconsistency = ((1-y)*model_output).max(dim=-1)[0].detach().cpu().numpy()
+            inconsistency = (1 - y*model_output).min(dim=-1)[0].detach().cpu().numpy()
+            inconsistencies = np.concatenate([inconsistencies, inconsistency])
+            # log every 100 speakers
+            if i % 100 == 0:
+                precision = compute_precision(inconsistencies, is_noisies, train_config.noise_level)
+                print(f'{i = }, {precision = :.4f}')
+    
+    precision = compute_precision(inconsistencies, is_noisies, train_config.noise_level)
 
-    return inconsistencies, noise
+    bmm_model, bmm_model_max, bmm_model_min = fit_bmm(inconsistencies, max_iters=10, rm_outliers=True)
+    estimated_noise_level = bmm_model.weight[1]
+    print(f'{bmm_model.weight = }')
+    print(f'{estimated_noise_level = }')
+    print(f'{precision = }')
+
+    return inconsistencies, is_noisies
 
 
 @torch.no_grad()
@@ -183,7 +197,7 @@ def compute_loss_inconsistency(
 
     clean_memory()
     noisy_collected = False
-    noise = np.array([], dtype=np.bool8)
+    is_noisies = np.array([], dtype=np.bool8)
     all_losses = []
     for selected_iteration in selected_iterations:
         model = train_config.forge_model(
@@ -196,6 +210,7 @@ def compute_loss_inconsistency(
         criterion.load_state_dict(torch.load(
             model_dir / f'loss-{selected_iteration}.pth', map_location=device,
         ))
+        criterion.eval()
 
         losses = np.array([], dtype=np.float32)
         for i in range(len(label_dataset)):
@@ -212,7 +227,7 @@ def compute_loss_inconsistency(
             loss = cross_entropy(model_output, torch.tensor([label for _ in range(bs)]), reduction='none')
             losses = np.concatenate([losses, loss.detach().cpu().numpy()])
             if not noisy_collected:
-                noise = np.concatenate([noise, np.array(is_noisy)])
+                is_noisies = np.concatenate([is_noisies, np.array(is_noisy)])
 
         all_losses.append(loss)
         noisy_collected = True
@@ -221,4 +236,4 @@ def compute_loss_inconsistency(
     loss_mean = all_losses.mean(axis=0)
     loss_variance = all_losses.var(axis=0)
 
-    return noise, loss_mean, loss_variance
+    return is_noisies, loss_mean, loss_variance

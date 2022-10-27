@@ -1,0 +1,1 @@
+python . nld-confidence data/training-models/Permute-20-CE-bs256-seed2 --selected-iterations final

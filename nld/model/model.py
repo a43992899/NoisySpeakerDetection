@@ -40,12 +40,15 @@ class SpeechEmbedder(nn.Module):
             self.bn1 = None
             self.softmax = None
 
-    def forward(self, x: Tensor):
+    def forward(self, x: Tensor, logsoftmax=True) -> Tensor:
         x = self.get_embedding(x)
         if self.should_softmax:
             x = self.projection2(x.float())
             x = self.bn1(x)
-            x = self.softmax(x)
+            if logsoftmax:
+                x = self.softmax(x)
+            else:
+                x = F.softmax(x, dim=-1)
         return x
 
     def get_embedding(self, x: Tensor) -> Tensor:
