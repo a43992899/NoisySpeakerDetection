@@ -1,5 +1,5 @@
 from .ge2e_centroid import compute_and_save_ge2e_embedding_centroid
-from .inconsistence import (compute_confidence_inconsistency,
+from .inconsistency import (compute_confidence_inconsistency,
                             compute_distance_inconsistency)
 
 
