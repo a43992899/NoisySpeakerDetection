@@ -12,6 +12,7 @@ NoiseLevel = Literal[0, 20, 50, 75]
 NoiseType = Literal['Permute', 'Open', 'Mix']
 LossType = Literal['CE', 'GE2E', 'AAM', 'AAMSC']
 OptimizerType = Literal['Adam']
+InconsistencyType = Literal['Distance', 'Confidence']
 
 NOISE_LEVELS: Tuple[NoiseLevel] = get_args(NoiseLevel)
 NOISE_TYPES: Tuple[NoiseType] = get_args(NoiseType)
@@ -153,3 +154,9 @@ class TestConfig(BaseConfig):
 
     model_dir: Path
     iteration: str
+
+
+@dataclass
+class NoisyLabelDetectionConfig(BaseConfig):
+    train_config: Union[TrainConfig, Dict[str, Any]]
+    inconsistency: InconsistencyType

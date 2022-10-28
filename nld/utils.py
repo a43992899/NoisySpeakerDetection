@@ -2,7 +2,7 @@ import gc
 import os
 import random
 from datetime import datetime, timezone
-from typing import Generator, List, Optional
+from typing import Generator, List
 
 import numpy as np
 import numpy.typing as npt
@@ -21,6 +21,7 @@ def get_device(cuda_device_index: int = 0):
 
 
 def clean_memory():
+    """Free unused memory in CPU and CUDA if available."""
     gc.collect()
     if cuda_is_available():
         empty_cuda_cache()
