@@ -128,11 +128,11 @@ class SpeakerDataset(Dataset):
         )
 
     @staticmethod
-    def collate_fn(batch: Sequence[Tuple[Tensor, Tensor, Tensor, List[Path], List[Path]]]):
+    def collate_fn(batch: Sequence[Tuple[Tensor, Tensor, Tensor, List[str], None]]):
         return (
             torch.stack([b[0] for b in batch]),
             torch.stack([b[1] for b in batch]),
             torch.stack([b[2] for b in batch]),
-            [b[3] for b in batch],
+            [b[3] for b in batch],  # TODO: unpack lists into one single list
             [b[4] for b in batch],
         )

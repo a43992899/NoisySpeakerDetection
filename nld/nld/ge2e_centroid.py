@@ -58,15 +58,15 @@ def compute_and_save_ge2e_embedding_centroid(
         mislabeled_json_file = find_mislabeled_json(
             mislabeled_json_dir, train_config.noise_type, train_config.noise_level
         )
-        label_dataset = SpeakerDataset(
+        dataset = SpeakerDataset(
             -1, vox1_mel_spectrogram_dir, vox2_mel_spectrogram_dir, mislabeled_json_file,
         )
         model = train_config.forge_model(data_processing_config.nmels, VOX2_CLASS_NUM).to(device).eval()
 
         tensors: Dict[Path, List[Tensor]] = dict()
-        for i in tqdm(range(len(label_dataset)), total=len(label_dataset), desc=str(key)):
-            mel, _, label = label_dataset[i]
-            assert i == label
+        for i in tqdm(range(len(dataset)), total=len(dataset), desc=str(key)):
+            mel, _, labels, _, _ = dataset[i]
+            assert torch.all(i == labels).item() is True
             mel: Tensor = mel.to(device)
             for model_dir in model_dirs:
                 model.load_state_dict(
