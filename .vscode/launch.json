@@ -10,7 +10,7 @@
       "justMyCode": true,
       "args": [
         "nld-distance",
-        "data/training-models/Open-20-CE-bs256-seed2",
+        "data/training-models/Open-50-GE2E-bs256-M8-seed0",
         "--debug"
       ]
     },

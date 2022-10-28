@@ -33,7 +33,7 @@ def compute_and_save_ge2e_embedding_centroid(
         ('Open', 75): [],
     }
     for model_dir in all_model_dir.iterdir():
-        if not model_dir.is_dir() or 'seed0' not in model_dir.name or 'GE2E' not in model_dir.name:
+        if not model_dir.is_dir() or 'seed2' not in model_dir.name or 'GE2E' not in model_dir.name:
             continue
         train_config = TrainConfig.from_json(model_dir / 'config.json')
         assert train_config.loss == 'GE2E'
@@ -76,13 +76,10 @@ def compute_and_save_ge2e_embedding_centroid(
                 )
 
                 batch_size = mels.size(0)
-                mel_chunks = [mels[m:m + 512, ...] for m in range(0, 512 * (batch_size // 512 + 1), 512)]
-
-                embeddings = []
-                for mel_chunk in mel_chunks:
-                    embeddings_chunk = model.get_embedding(mel_chunk)
-                    embeddings.append(embeddings_chunk)
+                mel_chunks = [mels[m:m + 512, ...] for m in range(0, 512 * (batch_size // 512), 512)]
+                embeddings = [model.get_embedding(mel_chunk) for mel_chunk in mel_chunks]
                 embeddings = torch.cat(embeddings, dim=0)
+                assert embeddings.size(0) == batch_size
 
                 centroid = embeddings.mean(dim=0)
                 centroid_norm = torch.clone(normalize(centroid, dim=-1)).cpu()
