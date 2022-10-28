@@ -74,14 +74,23 @@ def compute_and_save_ge2e_embedding_centroid(
                 model.load_state_dict(
                     torch.load(model_dir / f'model-{selected_iteration}.pth', map_location=device)
                 )
-                embeddings = model.get_embedding(mels)
+
+                batch_size = mels.size(0)
+                mel_chunks = [mels[m:m + 512, ...] for m in range(0, 512 * (batch_size // 512 + 1), 512)]
+
+                embeddings = []
+                for mel_chunk in mel_chunks:
+                    embeddings_chunk = model.get_embedding(mel_chunk)
+                    embeddings.append(embeddings_chunk)
+                embeddings = torch.cat(embeddings, dim=0)
+
                 centroid = embeddings.mean(dim=0)
                 centroid_norm = torch.clone(normalize(centroid, dim=-1)).cpu()
                 try:
                     tensors[model_dir].append(centroid_norm)
                 except LookupError:
                     tensors[model_dir] = [centroid_norm]
-            if debug and i == 10:
+            if debug and i == 200:
                 break
 
         for model_dir, centroids in tensors.items():
