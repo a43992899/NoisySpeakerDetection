@@ -25,7 +25,6 @@ def compute_precision(ypreds: npt.NDArray, ylabels: npt.NDArray, noise_level: np
     return precision
 
 
-@torch.no_grad()
 def compute_distance_inconsistency(
     model_dir: Path, selected_iteration: str, vox1_mel_spectrogram_dir: Path,
     vox2_mel_spectrogram_dir: Path, mislabeled_json_dir: Path, debug: bool,
@@ -52,24 +51,25 @@ def compute_distance_inconsistency(
     clean_memory()
     inconsistencies = np.array([], dtype=np.float32)
     is_noises = np.array([], dtype=np.bool8)
-    for i in tqdm(range(len(dataset)), total=len(dataset), desc='Evaluating centroids and distances...'):
-        mels, is_noisy, labels, _, _ = dataset[i]
-        assert torch.all(i == labels).item() is True
-        mels = mels.to(device)
-        embeddings: Tensor = model.get_embedding(mels)
-        centroid_norm = normalize(embeddings.mean(dim=0), dim=-1)
-        embeddings_norm = normalize(embeddings, dim=-1)
-        inconsistencies = np.concatenate([
-            inconsistencies,
-            1 - (embeddings_norm @ centroid_norm.unsqueeze(-1)).flatten().cpu().numpy()
-        ])
-        is_noises = np.concatenate([is_noises, np.array(is_noisy)])
-        if i % 100 == 0:
-            precision = compute_precision(inconsistencies, is_noises, train_config.noise_level)
-            if debug:
-                print(f'{i = }, {precision = :.4f}')
-            else:
-                wandb.log({'Intermediate Precision': precision})
+    with torch.no_grad():
+        for i in tqdm(range(len(dataset)), total=len(dataset), desc='Evaluating centroids and distances...'):
+            mels, is_noisy, labels, _, _ = dataset[i]
+            assert torch.all(i == labels).item() is True
+            mels = mels.to(device)
+            embeddings: Tensor = model.get_embedding(mels)
+            centroid_norm = normalize(embeddings.mean(dim=0), dim=-1)
+            embeddings_norm = normalize(embeddings, dim=-1)
+            inconsistencies = np.concatenate([
+                inconsistencies,
+                1 - (embeddings_norm @ centroid_norm.unsqueeze(-1)).flatten().cpu().numpy()
+            ])
+            is_noises = np.concatenate([is_noises, np.array(is_noisy)])
+            if i % 100 == 0:
+                precision = compute_precision(inconsistencies, is_noises, train_config.noise_level)
+                if debug:
+                    print(f'{i = }, {precision = :.4f}')
+                else:
+                    wandb.log({'Intermediate Precision': precision})
 
     precision = compute_precision(inconsistencies, is_noises, train_config.noise_level)
 
@@ -133,44 +133,46 @@ def compute_confidence_inconsistency(
             raise RuntimeError(f'Can\'t find the saved GE2E embedding centroids.')
         norm_centroids: Tensor = torch.load(ge2e_centroid_file, map_location=device)
 
-        for i in tqdm(range(len(dataset)), total=len(dataset), desc=f'Processing {model_dir.stem}'):
-            mels, is_noisy, labels, _, _ = dataset[i]
-            assert torch.all(i == labels).item() is True
-            mels = mels.to(device)
-            norm_embedding: Tensor = normalize(model(mels), dim=-1)
-            all_similarities = w * (norm_embedding @ norm_centroids.T) + b
-            y = one_hot(torch.tensor(labels), VOX2_CLASS_NUM).to(device)
-            inconsistencies = np.concatenate([
-                inconsistencies, torch.max(all_similarities * (1 - y), dim=-1)[0].detach().cpu().numpy()
-            ])
-            is_noisies = np.concatenate([is_noisies, is_noisy])
-            if i % 100 == 0:
-                precision = compute_precision(inconsistencies, is_noisies, train_config.noise_level)
-                if debug:
-                    print(f'{i = }, {precision = :.4f}')
-                else:
-                    wandb.log({'Intermediate Precision': precision})
+        with torch.no_grad():
+            for i in tqdm(range(len(dataset)), total=len(dataset), desc=f'Processing {model_dir.stem}'):
+                mels, is_noisy, labels, _, _ = dataset[i]
+                assert torch.all(i == labels).item() is True
+                mels = mels.to(device)
+                norm_embedding: Tensor = normalize(model(mels), dim=-1)
+                all_similarities = w * (norm_embedding @ norm_centroids.T) + b
+                y = one_hot(torch.tensor(labels), VOX2_CLASS_NUM).to(device)
+                inconsistencies = np.concatenate([
+                    inconsistencies, torch.max(all_similarities * (1 - y), dim=-1)[0].detach().cpu().numpy()
+                ])
+                is_noisies = np.concatenate([is_noisies, is_noisy])
+                if i % 100 == 0:
+                    precision = compute_precision(inconsistencies, is_noisies, train_config.noise_level)
+                    if debug:
+                        print(f'{i = }, {precision = :.4f}')
+                    else:
+                        wandb.log({'Intermediate Precision': precision})
     else:
-        for i in tqdm(range(len(dataset)), total=len(dataset), desc=f'Processing {model_dir.stem}'):
-            mels, is_noisy, labels, _, _ = dataset[i]
-            assert torch.all(i == labels).item() is True
-            mels: Tensor = mels.to(device)
-            y = one_hot(torch.tensor(labels), VOX2_CLASS_NUM).to(device)
-            model_output: Tensor = model(mels, logsoftmax=False)
-            if train_config.loss in ('AAM', 'AAMSC'):
-                assert isinstance(criterion, (AAMSoftmax, SubcenterArcMarginProduct))
-                model_output = criterion.directly_predict(model_output)
-                model_output = softmax(model_output, dim=-1)
-            inconsistencies = np.concatenate([
-                inconsistencies, (1 - y * model_output).min(dim=-1)[0].detach().cpu().numpy()
-            ])
-            is_noisies = np.concatenate([is_noisies, is_noisy])
-            if i % 100 == 0:
-                precision = compute_precision(inconsistencies, is_noisies, train_config.noise_level)
-                if debug:
-                    print(f'{i = }, {precision = :.4f}')
-                else:
-                    wandb.log({'Intermediate Precision': precision})
+        with torch.no_grad():
+            for i in tqdm(range(len(dataset)), total=len(dataset), desc=f'Processing {model_dir.stem}'):
+                mels, is_noisy, labels, _, _ = dataset[i]
+                assert torch.all(i == labels).item() is True
+                mels: Tensor = mels.to(device)
+                y = one_hot(torch.tensor(labels), VOX2_CLASS_NUM).to(device)
+                model_output: Tensor = model(mels, logsoftmax=False)
+                if train_config.loss in ('AAM', 'AAMSC'):
+                    assert isinstance(criterion, (AAMSoftmax, SubcenterArcMarginProduct))
+                    model_output = criterion.directly_predict(model_output)
+                    model_output = softmax(model_output, dim=-1)
+                inconsistencies = np.concatenate([
+                    inconsistencies, (1 - y * model_output).min(dim=-1)[0].detach().cpu().numpy()
+                ])
+                is_noisies = np.concatenate([is_noisies, is_noisy])
+                if i % 100 == 0:
+                    precision = compute_precision(inconsistencies, is_noisies, train_config.noise_level)
+                    if debug:
+                        print(f'{i = }, {precision = :.4f}')
+                    else:
+                        wandb.log({'Intermediate Precision': precision})
 
     precision = compute_precision(inconsistencies, is_noisies, train_config.noise_level)
 
