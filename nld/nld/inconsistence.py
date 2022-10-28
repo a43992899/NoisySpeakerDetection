@@ -184,7 +184,7 @@ def compute_confidence_inconsistency(
             mel_chunks = [mels[m:m + 512, ...] for m in range(0, 512 * ((batch_size - 1) // 512 + 1), 512)]
             model_output = [model(mel_chunk, logsoftmax=False) for mel_chunk in mel_chunks]
             model_output = torch.cat(model_output, dim=0)
-            assert embeddings.size(0) == batch_size
+            assert model_output.size(0) == batch_size
 
             if train_config.loss in ('AAM', 'AAMSC'):
                 assert isinstance(criterion, (AAMSoftmax, SubcenterArcMarginProduct))
