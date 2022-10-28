@@ -2,7 +2,16 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "NLD",
+      "name": "NLD GE2E Centroid",
+      "type": "python",
+      "request": "launch",
+      "program": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "justMyCode": true,
+      "args": ["nld-save-ge2e-embedding-centroid", "--debug"]
+    },
+    {
+      "name": "NLD Confidence Test",
       "type": "python",
       "request": "launch",
       "program": "${workspaceFolder}",
@@ -11,8 +20,7 @@
       "args": [
         "nld-confidence",
         "data/training-models/Open-20-CE-bs256-seed2",
-        "--selected-iterations",
-        "final"
+        "--debug"
       ]
     },
     {

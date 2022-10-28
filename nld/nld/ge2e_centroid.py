@@ -15,7 +15,7 @@ from ..utils import get_device
 @torch.no_grad()
 def compute_and_save_ge2e_embedding_centroid(
     all_model_dir: Path, selected_iteration: str, vox1_mel_spectrogram_dir: Path,
-    vox2_mel_spectrogram_dir: Path, mislabeled_json_dir: Path
+    vox2_mel_spectrogram_dir: Path, mislabeled_json_dir: Path, debug: bool,
 ):
     """Pre-compute normalized embeddings centroid for GE2E."""
     device = get_device()
@@ -56,28 +56,35 @@ def compute_and_save_ge2e_embedding_centroid(
     for key, model_dirs in noise_dict.items():
         train_config = TrainConfig.from_json(model_dirs[0] / 'config.json')
         mislabeled_json_file = find_mislabeled_json(
-            mislabeled_json_dir, train_config.noise_type, train_config.noise_level
+            mislabeled_json_dir, train_config.noise_type, train_config.noise_level,
         )
         dataset = SpeakerDataset(
             -1, vox1_mel_spectrogram_dir, vox2_mel_spectrogram_dir, mislabeled_json_file,
         )
-        model = train_config.forge_model(data_processing_config.nmels, VOX2_CLASS_NUM).to(device).eval()
+        model = train_config.forge_model(
+            data_processing_config.nmels, VOX2_CLASS_NUM
+        ).to(device).eval()
 
         tensors: Dict[Path, List[Tensor]] = dict()
         for i in tqdm(range(len(dataset)), total=len(dataset), desc=str(key)):
-            mel, _, labels, _, _ = dataset[i]
+            mels, _, labels, _, _ = dataset[i]
             assert torch.all(i == labels).item() is True
-            mel: Tensor = mel.to(device)
+            mels: Tensor = mels.to(device)
             for model_dir in model_dirs:
                 model.load_state_dict(
                     torch.load(model_dir / f'model-{selected_iteration}.pth', map_location=device)
                 )
-                centroid = normalize(model.get_embedding(mel).mean(dim=0), dim=-1)
+                embeddings = model.get_embedding(mels)
+                centroid = embeddings.mean(dim=0)
+                centroid_norm = torch.clone(normalize(centroid, dim=-1)).cpu()
                 try:
-                    tensors[model_dir].append(centroid)
+                    tensors[model_dir].append(centroid_norm)
                 except LookupError:
-                    tensors[model_dir] = [centroid]
+                    tensors[model_dir] = [centroid_norm]
+            if debug and i == 10:
+                break
 
         for model_dir, centroids in tensors.items():
             centroids = torch.stack(centroids)
-            torch.save(centroids, model_dir / f'ge2e-centroids-{selected_iteration}.pth')
+            if not debug:
+                torch.save(centroids, model_dir / f'ge2e-centroids-{selected_iteration}.pth')

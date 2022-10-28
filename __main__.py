@@ -98,6 +98,7 @@ nld_ge2e_centroids_parser.add_argument(
 nld_ge2e_centroids_parser.add_argument(
     '--vox2-mel-spectrogram-dir', default=DEFAULT_VOX2_MEL_SPECTROGRAM_DIR, type=Path
 )
+nld_ge2e_centroids_parser.add_argument('-d', '--debug', action='store_true')
 
 nld_distance_parser = main_subparser.add_parser('nld-distance')
 nld_distance_parser.set_defaults(main_func=nld_distance_main)
