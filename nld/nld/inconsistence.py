@@ -87,7 +87,8 @@ def compute_distance_inconsistency(
         })
         wandb.finish()
 
-    # return inconsistencies, is_noises
+    np.save(model_dir / f'nld-distance-inconsistencies-{selected_iteration}.npy', inconsistencies)
+    np.save(model_dir / f'nld-distance-noise-labels-{selected_iteration}.npy', is_noises)
 
 
 @torch.no_grad()
@@ -122,7 +123,7 @@ def compute_confidence_inconsistency(
 
     clean_memory()
     inconsistencies = np.array([], dtype=np.float32)
-    is_noisies = np.array([], dtype=np.bool8)
+    is_noises = np.array([], dtype=np.bool8)
     if train_config.loss == 'GE2E':
         assert isinstance(criterion, GE2ELoss)
         w = criterion.w
@@ -144,9 +145,9 @@ def compute_confidence_inconsistency(
                 inconsistencies = np.concatenate([
                     inconsistencies, torch.max(all_similarities * (1 - y), dim=-1)[0].detach().cpu().numpy()
                 ])
-                is_noisies = np.concatenate([is_noisies, is_noisy])
+                is_noises = np.concatenate([is_noises, is_noisy])
                 if i % 100 == 0:
-                    precision = compute_precision(inconsistencies, is_noisies, train_config.noise_level)
+                    precision = compute_precision(inconsistencies, is_noises, train_config.noise_level)
                     if debug:
                         print(f'{i = }, {precision = :.4f}')
                     else:
@@ -166,15 +167,15 @@ def compute_confidence_inconsistency(
                 inconsistencies = np.concatenate([
                     inconsistencies, (1 - y * model_output).min(dim=-1)[0].detach().cpu().numpy()
                 ])
-                is_noisies = np.concatenate([is_noisies, is_noisy])
+                is_noises = np.concatenate([is_noises, is_noisy])
                 if i % 100 == 0:
-                    precision = compute_precision(inconsistencies, is_noisies, train_config.noise_level)
+                    precision = compute_precision(inconsistencies, is_noises, train_config.noise_level)
                     if debug:
                         print(f'{i = }, {precision = :.4f}')
                     else:
                         wandb.log({'Intermediate Precision': precision})
 
-    precision = compute_precision(inconsistencies, is_noisies, train_config.noise_level)
+    precision = compute_precision(inconsistencies, is_noises, train_config.noise_level)
 
     bmm_model, _, _ = fit_bmm(inconsistencies, max_iters=10, rm_outliers=True)
     estimated_noise_level = bmm_model.weight[1]
@@ -190,4 +191,5 @@ def compute_confidence_inconsistency(
         })
         wandb.finish()
 
-    # return inconsistencies, is_noisies
+    np.save(model_dir / f'nld-confidence-inconsistencies-{selected_iteration}.npy', inconsistencies)
+    np.save(model_dir / f'nld-confidence-noise-labels-{selected_iteration}.npy', is_noises)
