@@ -162,6 +162,7 @@ def compute_confidence_inconsistency(
 
             norm_embedding: Tensor = normalize(embeddings, dim=-1)
             all_similarities = w * (norm_embedding @ norm_centroids.T) + b
+            all_similarities = softmax(all_similarities, dim=-1)
             y = one_hot(torch.tensor(labels), VOX2_CLASS_NUM).to(device)
             inconsistencies = np.concatenate([
                 inconsistencies, torch.min(1 - all_similarities * y, dim=-1)[0].detach().cpu().numpy()
