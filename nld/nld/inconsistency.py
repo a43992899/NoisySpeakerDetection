@@ -1,6 +1,5 @@
 import json
 from pathlib import Path
-from typing import List
 
 import wandb
 import numpy as np
@@ -11,7 +10,7 @@ from torch.nn.functional import normalize, one_hot, softmax
 from tqdm.auto import tqdm
 
 from ..constant.entities import WANDB_NLD_PROJECT_NAME, WANDB_ENTITY
-from ..constant.config import DataConfig, NoisyLabelDetectionConfig, TrainConfig
+from ..constant.config import DataConfig, NoiseLevel, NoisyLabelDetectionConfig, TrainConfig
 from ..model.loss import AAMSoftmax, GE2ELoss, SubcenterArcMarginProduct
 from ..process_data.dataset import VOX2_CLASS_NUM, SpeakerDataset
 from ..process_data.mislabel import find_mislabeled_json
@@ -19,11 +18,9 @@ from ..utils import clean_memory, get_device
 from .beta_mixture import fit_bmm
 
 
-def compute_precision(ypreds: npt.NDArray, ylabels: npt.NDArray, noise_level: npt.NDArray):
+def compute_precision(ypreds: npt.NDArray, ylabels: npt.NDArray, noise_level: NoiseLevel):
     selected_indices = np.argsort(ypreds)[-int(len(ypreds) * noise_level / 100):]
-    selected_ypreds = ypreds[selected_indices]
     selected_ylabels = ylabels[selected_indices]
-    # compute precision
     return selected_ylabels.sum() / len(selected_ylabels)
 
 
@@ -130,7 +127,7 @@ def compute_confidence_inconsistency(
         wandb.init(
             project=WANDB_NLD_PROJECT_NAME,
             entity=WANDB_ENTITY,
-            name=f'conficence-{train_config.description}',
+            name=f'confidence-{train_config.description}',
             config=nld_config.to_dict()
         )
 
