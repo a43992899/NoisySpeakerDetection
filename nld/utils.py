@@ -7,7 +7,6 @@ from typing import Generator, List
 import numpy as np
 import numpy.typing as npt
 import torch
-import torch.autograd as grad
 from scipy.interpolate import interp1d
 from scipy.optimize import brentq
 from sklearn.metrics import roc_curve
@@ -15,7 +14,14 @@ from torch.cuda import empty_cache as empty_cuda_cache
 from torch.cuda import is_available as cuda_is_available
 
 
+def get_device(cuda_device_index: int = 0):
+    if cuda_is_available():
+        return torch.device('cuda', cuda_device_index)
+    return torch.device('cpu')
+
+
 def clean_memory():
+    """Free unused memory in CPU and CUDA if available."""
     gc.collect()
     if cuda_is_available():
         empty_cuda_cache()

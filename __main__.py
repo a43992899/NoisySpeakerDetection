@@ -3,7 +3,8 @@ from pathlib import Path
 
 from nld.constant.config import LOSSES, NOISE_LEVELS, NOISE_TYPES, OPTIMIZERS
 from nld.constant.defaults import *
-from nld.nld import nld_distance_main
+from nld.nld import (nld_confidence_main, nld_distance_main,
+                     nld_save_ge2e_embedding_centroid_main)
 from nld.process_data import produce_mel_spectrogram, produce_noisy_label
 from nld.train import test_main, train_main
 
@@ -63,6 +64,7 @@ train_parser.add_argument('--random-seed', default=DEFAULT_RANDOM_SEED, type=int
 train_parser.add_argument('--restore-model-from', default='', type=str)
 train_parser.add_argument('--restore-loss-from', default='', type=str)
 # The following args won't be saved to config
+train_parser.add_argument('--cuda-device-index', type=int, default=0)
 train_parser.add_argument('--save-interval', default=DEFAULT_SAVING_INTERVAL, type=int)
 train_parser.add_argument('--training-model-save-dir', default=DEFAULT_TRAINING_MODEL_DIR, type=Path)
 train_parser.add_argument('--mislabeled-json-dir', default=DEFAULT_VOXCELEB_MISLABELED_JSON_DIR, type=Path)
@@ -83,19 +85,34 @@ test_parser.add_argument('--stride', default=1, type=int)
 test_parser.add_argument('--vox1test-mel-spectrogram-dir', default=DEFAULT_VOX1TEST_MEL_SPECTROGRAM_DIR, type=Path)
 test_parser.add_argument('-d', '--debug', action='store_true')
 
+nld_ge2e_centroids_parser = main_subparser.add_parser('nld-save-ge2e-embedding-centroid')
+nld_ge2e_centroids_parser.set_defaults(main_func=nld_save_ge2e_embedding_centroid_main)
+nld_ge2e_centroids_parser.add_argument('--model-dir', default=DEFAULT_TRAINING_MODEL_DIR, type=Path)
+nld_ge2e_centroids_parser.add_argument('--selected-iteration', default='final', type=str)
+nld_ge2e_centroids_parser.add_argument(
+    '--mislabeled-json-dir', default=DEFAULT_VOXCELEB_MISLABELED_JSON_DIR, type=Path
+)
+nld_ge2e_centroids_parser.add_argument(
+    '--vox1-mel-spectrogram-dir', default=DEFAULT_VOX1_MEL_SPECTROGRAM_DIR, type=Path
+)
+nld_ge2e_centroids_parser.add_argument(
+    '--vox2-mel-spectrogram-dir', default=DEFAULT_VOX2_MEL_SPECTROGRAM_DIR, type=Path
+)
+nld_ge2e_centroids_parser.add_argument('-d', '--debug', action='store_true')
+
 nld_distance_parser = main_subparser.add_parser('nld-distance')
 nld_distance_parser.set_defaults(main_func=nld_distance_main)
 nld_distance_parser.add_argument('model_dir', type=Path)
-nld_distance_parser.add_argument('--selected-iterations', type=str, nargs='*')
+nld_distance_parser.add_argument('--selected-iteration', default='final', type=str)
 nld_distance_parser.add_argument('--mislabeled-json-dir', default=DEFAULT_VOXCELEB_MISLABELED_JSON_DIR, type=Path)
 nld_distance_parser.add_argument('--vox1-mel-spectrogram-dir', default=DEFAULT_VOX1_MEL_SPECTROGRAM_DIR, type=Path)
 nld_distance_parser.add_argument('--vox2-mel-spectrogram-dir', default=DEFAULT_VOX2_MEL_SPECTROGRAM_DIR, type=Path)
 nld_distance_parser.add_argument('-d', '--debug', action='store_true')
 
 nld_confidence_parser = main_subparser.add_parser('nld-confidence')
-nld_confidence_parser.set_defaults(main_func=nld_distance_main)
+nld_confidence_parser.set_defaults(main_func=nld_confidence_main)
 nld_confidence_parser.add_argument('model_dir', type=Path)
-nld_confidence_parser.add_argument('--selected-iterations', type=str, nargs='*')
+nld_confidence_parser.add_argument('--selected-iteration', default='final', type=str)
 nld_confidence_parser.add_argument('--mislabeled-json-dir', default=DEFAULT_VOXCELEB_MISLABELED_JSON_DIR, type=Path)
 nld_confidence_parser.add_argument('--vox1-mel-spectrogram-dir', default=DEFAULT_VOX1_MEL_SPECTROGRAM_DIR, type=Path)
 nld_confidence_parser.add_argument('--vox2-mel-spectrogram-dir', default=DEFAULT_VOX2_MEL_SPECTROGRAM_DIR, type=Path)

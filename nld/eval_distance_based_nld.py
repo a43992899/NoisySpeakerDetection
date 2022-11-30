@@ -11,10 +11,10 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from .constant.config import Hparam
-from .nld.beta_mixture import fit_bmm
 from .model.loss import (AAMSoftmax, GE2ELoss, SpeechEmbedder,
                          SpeechEmbedder_Softmax, SubcenterArcMarginProduct,
                          get_cossim)
+from .nld.beta_mixture import fit_bmm
 from .process_data.dataset import SpeakerDatasetPreprocessed
 from .utils import (get_all_file_with_ext, isTarget, set_random_seed_to,
                     write_to_csv)
