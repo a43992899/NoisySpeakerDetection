@@ -1,5 +1,5 @@
 # NoisySpeakerDetection
-Detect mislabeled speaker ID
+Detect mislabeled speaker ID. 
 
 Paper:  
 ```
