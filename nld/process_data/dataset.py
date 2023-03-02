@@ -26,7 +26,8 @@ class SpeakerDataset(Dataset):
 
     def __init__(
         self, sample_num: int, ood_mel_dir: Optional[Path],
-        main_mel_dir: Path, mislabel_json: Optional[Path]
+        main_mel_dir: Path, mislabel_json: Optional[Path],
+        del_utter_json: Optional[Path] = None
     ) -> None:
         super().__init__()
 
@@ -36,11 +37,17 @@ class SpeakerDataset(Dataset):
         with open(self.main_mel_dir / 'speaker-label-to-id.json', 'r') as f:
             self.spkr_name2id = json.load(f)
             self.spkr_id2name = {v: k for k, v in self.spkr_name2id.items()}
+        
+        self.mislabel_mapper = None
         if mislabel_json is not None:
             with open(mislabel_json, 'r') as f:
-                self.mislabel_mapper = json.load(f)
-        else:
-            self.mislabel_mapper = None
+                self.mislabel_mapper = json.load(f)            
+        
+        self.del_utter_mapper = dict()
+        if del_utter_json is not None:
+            with open(del_utter_json, 'r') as f:
+                self.del_utter_mapper = json.load(f)
+
         self.get_spkr2utter()
 
     def get_spkr2utter(self):
@@ -74,15 +81,25 @@ class SpeakerDataset(Dataset):
                         mislabel_file = self.ood_mel_dir / mislabel_file_or_label
                         if spkr_name not in self.spkr_name2utter_mislabel:
                             self.spkr_name2utter_mislabel[spkr_name] = []
+                        # delete utterance (after nld process)
+                        if mislabel_file.name in self.del_utter_mapper:
+                            continue
                         self.spkr_name2utter_mislabel[spkr_name].append(mislabel_file)
                     else:  # Is a label. Is the permute noise
                         mislabel_spkr_name = mislabel_file_or_label
                         if mislabel_spkr_name not in self.spkr_name2utter_mislabel:
                             self.spkr_name2utter_mislabel[mislabel_spkr_name] = []
+                        # delete utterance (after nld process)
+                        if utter_file.name in self.del_utter_mapper:
+                            continue
                         self.spkr_name2utter_mislabel[mislabel_spkr_name].append(utter_file)
                 else:
+                    # add clean utter
                     if spkr_name not in self.spkr_name2utter_mislabel:
                         self.spkr_name2utter_mislabel[spkr_name] = []
+                    # delete utterance (after nld process)
+                    if utter_file.name in self.del_utter_mapper:
+                        continue
                     self.spkr_name2utter_mislabel[spkr_name].append(utter_file)
 
         if self.mislabel_mapper is None:

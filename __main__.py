@@ -107,6 +107,7 @@ nld_distance_parser.add_argument('--selected-iteration', default='final', type=s
 nld_distance_parser.add_argument('--mislabeled-json-dir', default=DEFAULT_VOXCELEB_MISLABELED_JSON_DIR, type=Path)
 nld_distance_parser.add_argument('--vox1-mel-spectrogram-dir', default=DEFAULT_VOX1_MEL_SPECTROGRAM_DIR, type=Path)
 nld_distance_parser.add_argument('--vox2-mel-spectrogram-dir', default=DEFAULT_VOX2_MEL_SPECTROGRAM_DIR, type=Path)
+nld_distance_parser.add_argument('--save_prediction', action='store_true', help='save prediction to json file, path in...')
 nld_distance_parser.add_argument('-d', '--debug', action='store_true')
 
 nld_confidence_parser = main_subparser.add_parser('nld-confidence')
@@ -116,6 +117,7 @@ nld_confidence_parser.add_argument('--selected-iteration', default='final', type
 nld_confidence_parser.add_argument('--mislabeled-json-dir', default=DEFAULT_VOXCELEB_MISLABELED_JSON_DIR, type=Path)
 nld_confidence_parser.add_argument('--vox1-mel-spectrogram-dir', default=DEFAULT_VOX1_MEL_SPECTROGRAM_DIR, type=Path)
 nld_confidence_parser.add_argument('--vox2-mel-spectrogram-dir', default=DEFAULT_VOX2_MEL_SPECTROGRAM_DIR, type=Path)
+nld_confidence_parser.add_argument('--save_prediction', action='store_true', help='save prediction to json file, path in...')
 nld_confidence_parser.add_argument('-d', '--debug', action='store_true')
 
 args = main_parser.parse_args()

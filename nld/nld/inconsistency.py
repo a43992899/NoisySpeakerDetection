@@ -8,6 +8,7 @@ import torch
 from torch import Tensor
 from torch.nn.functional import normalize, one_hot, softmax
 from tqdm.auto import tqdm
+from typing import Dict, List, Optional, Sequence, Tuple
 
 from ..constant.entities import WANDB_NLD_PROJECT_NAME, WANDB_ENTITY
 from ..constant.config import DataConfig, NoiseLevel, NoisyLabelDetectionConfig, TrainConfig
@@ -23,6 +24,10 @@ def compute_precision(ypreds: npt.NDArray, ylabels: npt.NDArray, noise_level: No
     selected_ylabels = ylabels[selected_indices]
     return selected_ylabels.sum() / len(selected_ylabels)
 
+def predict_noisy_files(ypreds: npt.NDArray, filenames: List, noise_level: NoiseLevel):
+    selected_indices = np.argsort(ypreds)[-int(len(ypreds) * noise_level / 100):]
+    selected_filenames = [filenames[i] for i in selected_indices]
+    return selected_filenames
 
 @torch.no_grad()
 def compute_distance_inconsistency(
@@ -59,8 +64,9 @@ def compute_distance_inconsistency(
     clean_memory()
     inconsistencies = np.array([], dtype=np.float32)
     is_noises = np.array([], dtype=np.bool8)
+    all_utter_names = []
     for i in tqdm(range(len(dataset)), total=len(dataset), desc='Evaluating centroids and distances...'):
-        mels, is_noisy, labels, _, _ = dataset[i]
+        mels, is_noisy, labels, selected_utter_names, _ = dataset[i]
         assert torch.all(i == labels).item() is True
         mels = mels.to(device)
 
@@ -77,6 +83,7 @@ def compute_distance_inconsistency(
             1 - (embeddings_norm @ centroid_norm.unsqueeze(-1)).flatten().cpu().numpy()
         ], dtype=np.float32)
         is_noises = np.concatenate([is_noises, np.array(is_noisy)], dtype=np.bool8)
+        all_utter_names.extend(selected_utter_names)
         if i % 100 == 0:
             precision = compute_precision(inconsistencies, is_noises, train_config.noise_level)
             if debug:
@@ -85,6 +92,7 @@ def compute_distance_inconsistency(
                 wandb.log({'Intermediate Precision': precision})
 
     precision = compute_precision(inconsistencies, is_noises, train_config.noise_level)
+    noisy_files_detected = predict_noisy_files(inconsistencies, all_utter_names, train_config.noise_level)
 
     bmm_model, _, _ = fit_bmm(inconsistencies, max_iters=10, rm_outliers=True)
     estimated_noise_level = bmm_model.weight[1]
@@ -101,6 +109,8 @@ def compute_distance_inconsistency(
         wandb.finish()
         np.save(model_dir / f'nld-distance-inconsistencies-{selected_iteration}.npy', inconsistencies)
         np.save(model_dir / f'nld-distance-noise-labels-{selected_iteration}.npy', is_noises)
+        with open(model_dir / f'nld-distance-detected-noisy-files-{selected_iteration}.txt', 'w') as f:
+            f.write('\n'.join(noisy_files_detected))
 
 
 @torch.no_grad()
@@ -136,6 +146,7 @@ def compute_confidence_inconsistency(
     clean_memory()
     inconsistencies = np.array([], dtype=np.float32)
     is_noises = np.array([], dtype=np.bool8)
+    all_utter_names = []
     if train_config.loss == 'GE2E':
         assert isinstance(criterion, GE2ELoss)
         w = criterion.w
@@ -147,7 +158,7 @@ def compute_confidence_inconsistency(
         norm_centroids: Tensor = torch.load(ge2e_centroid_file, map_location=device)
 
         for i in tqdm(range(len(dataset)), total=len(dataset), desc=f'Processing {model_dir.stem}'):
-            mels, is_noisy, labels, _, _ = dataset[i]
+            mels, is_noisy, labels, selected_utter_names, _ = dataset[i]
             assert torch.all(i == labels).item() is True
             mels = mels.to(device)
 
@@ -165,6 +176,7 @@ def compute_confidence_inconsistency(
                 inconsistencies, torch.min(1 - all_similarities * y, dim=-1)[0].detach().cpu().numpy()
             ], dtype=np.float32)
             is_noises = np.concatenate([is_noises, is_noisy], dtype=np.bool8)
+            all_utter_names.extend(selected_utter_names)
             if i % 100 == 0:
                 precision = compute_precision(inconsistencies, is_noises, train_config.noise_level)
                 if debug:
@@ -173,7 +185,7 @@ def compute_confidence_inconsistency(
                     wandb.log({'Intermediate Precision': precision})
     else:
         for i in tqdm(range(len(dataset)), total=len(dataset), desc=f'Processing {model_dir.stem}'):
-            mels, is_noisy, labels, _, _ = dataset[i]
+            mels, is_noisy, labels, selected_utter_names, _ = dataset[i]
             assert torch.all(i == labels).item() is True
             mels: Tensor = mels.to(device)
             y = one_hot(torch.tensor(labels), VOX2_CLASS_NUM).to(device)
@@ -192,6 +204,7 @@ def compute_confidence_inconsistency(
                 inconsistencies, (1 - y * model_output).min(dim=-1)[0].detach().cpu().numpy()
             ], dtype=np.float32)
             is_noises = np.concatenate([is_noises, is_noisy], dtype=np.bool8)
+            all_utter_names.extend(selected_utter_names)
             if i % 100 == 0:
                 precision = compute_precision(inconsistencies, is_noises, train_config.noise_level)
                 if debug:
@@ -200,6 +213,7 @@ def compute_confidence_inconsistency(
                     wandb.log({'Intermediate Precision': precision})
 
     precision = compute_precision(inconsistencies, is_noises, train_config.noise_level)
+    noisy_files_detected = predict_noisy_files(inconsistencies, all_utter_names, train_config.noise_level)
 
     bmm_model, _, _ = fit_bmm(inconsistencies, max_iters=10, rm_outliers=True)
     estimated_noise_level = bmm_model.weight[1]
@@ -216,3 +230,5 @@ def compute_confidence_inconsistency(
         wandb.finish()
         np.save(model_dir / f'nld-confidence-inconsistencies-{selected_iteration}.npy', inconsistencies)
         np.save(model_dir / f'nld-confidence-noise-labels-{selected_iteration}.npy', is_noises)
+        with open(model_dir / f'nld-confidence-detected-noisy-files-{selected_iteration}.txt', 'w') as f:
+            f.write('\n'.join(noisy_files_detected))
