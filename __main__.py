@@ -70,6 +70,9 @@ train_parser.add_argument('--training-model-save-dir', default=DEFAULT_TRAINING_
 train_parser.add_argument('--mislabeled-json-dir', default=DEFAULT_VOXCELEB_MISLABELED_JSON_DIR, type=Path)
 train_parser.add_argument('--vox1-mel-spectrogram-dir', default=DEFAULT_VOX1_MEL_SPECTROGRAM_DIR, type=Path)
 train_parser.add_argument('--vox2-mel-spectrogram-dir', default=DEFAULT_VOX2_MEL_SPECTROGRAM_DIR, type=Path)
+train_parser.add_argument('--use-nld-result', default=None, required=False, type=str, choices=['distance', 'confidence'],
+    help="support 'distance' and 'confidence', which deletes the detected noisy samples from the training set, default is None. You should run nld-distance or nld-confidence first."
+)
 train_parser.add_argument('-d', '--debug', action='store_true')
 
 test_parser = main_subparser.add_parser('test')
@@ -83,6 +86,9 @@ test_parser.add_argument('--random-seed', type=int)
 test_parser.add_argument('--selected-iterations', type=str, nargs='*')
 test_parser.add_argument('--stride', default=1, type=int)
 test_parser.add_argument('--vox1test-mel-spectrogram-dir', default=DEFAULT_VOX1TEST_MEL_SPECTROGRAM_DIR, type=Path)
+test_parser.add_argument('--use-nld-result', default=None, required=None, type=str, choices=['distance', 'confidence'],
+    help="support 'distance' and 'confidence', which deletes the detected noisy samples from the training set, default is None. You should run nld-distance or nld-confidence first."
+)
 test_parser.add_argument('-d', '--debug', action='store_true')
 
 nld_ge2e_centroids_parser = main_subparser.add_parser('nld-save-ge2e-embedding-centroid')

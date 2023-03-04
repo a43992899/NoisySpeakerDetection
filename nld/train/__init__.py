@@ -14,6 +14,9 @@ def train_main(args):
 
     training_model_save_dir: Path = args.training_model_save_dir
     training_model_save_dir.mkdir(parents=True, exist_ok=True)
+    
+    use_nld_result = args.use_nld_result
+    assert use_nld_result in [None, 'confidence', 'distance']
 
     cfg = TrainConfig(
         restore_model_from=args.restore_model_from,
@@ -45,7 +48,7 @@ def train_main(args):
 
     train(
         cfg, mislabeled_json_file, vox1_mel_spectrogram_dir, vox2_mel_spectrogram_dir,
-        training_model_save_dir, save_interval, cuda_device_index, debug
+        training_model_save_dir, save_interval, cuda_device_index, use_nld_result, debug,
     )
 
 
@@ -54,14 +57,23 @@ def test_main(args):
     selected_iterations: Optional[List[str]] = args.selected_iterations
     stride: int = args.stride
     vox1test_mel_spectrogram_dir: Path = args.vox1test_mel_spectrogram_dir
+    use_nld_result = args.use_nld_result
+    assert use_nld_result in [None, 'confidence', 'distance']
     debug: bool = args.debug
+    
+    if use_nld_result is None:
+        model_name_prefix = 'model'
+    else:
+        model_name_prefix = f'model-post-nld-{use_nld_result}'
 
     if selected_iterations is None:
         selected_iterations = sorted(map(
             lambda s: s.stem.split('-')[-1],
-            filter(lambda p: p.stem.startswith('model'), model_dir.iterdir())
-        ), reverse=True)
-        selected_iterations = selected_iterations[0:len(selected_iterations) // 2:stride]
+            filter(
+                lambda p: p.stem.startswith(model_name_prefix),
+                model_dir.iterdir()
+            )
+        ), reverse=True)[0:len(selected_iterations) // 2:stride]
 
     if args.M % 2 != 0:
         raise ValueError()
@@ -77,4 +89,4 @@ def test_main(args):
             iteration=selected_iteration
         )
 
-        test(test_config, vox1test_mel_spectrogram_dir, debug)
+        test(test_config, vox1test_mel_spectrogram_dir, use_nld_result, debug)

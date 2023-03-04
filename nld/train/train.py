@@ -1,42 +1,58 @@
 import json
 from pathlib import Path
-from typing import List, Optional
+from typing import Literal, Optional
 
 import numpy as np
 import torch
-import wandb
 from torch import Tensor
 from torch.cuda import is_available as cuda_is_available
 from torch.cuda.amp import GradScaler, autocast
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
+import wandb
+
 from ..constant.config import DataConfig, TestConfig, TrainConfig
 from ..constant.entities import (WANDB_ENTITY, WANDB_TESTING_PROJECT_NAME,
                                  WANDB_TRAINING_PROJECT_NAME)
 from ..process_data.dataset import VOX2_CLASS_NUM, SpeakerDataset
-from ..utils import clean_memory, compute_eer, set_random_seed_to, get_device
+from ..utils import clean_memory, compute_eer, get_device, set_random_seed_to
 
 
 def train(
     cfg: TrainConfig, mislabeled_json_file: Optional[Path],
     vox1_mel_spectrogram_dir: Path, vox2_mel_spectrogram_dir: Path,
     training_model_save_dir: Path, save_interval: int,
-    cuda_device_index: int, debug: bool
+    cuda_device_index: int,
+    use_nld_result: Optional[Literal['confidence', 'distance']], debug: bool
 ):
     set_random_seed_to(cfg.random_seed)
     device = get_device(cuda_device_index)
-
+    
     if not debug:
+        job_name = cfg.description
+        if use_nld_result is not None:
+            job_name += f'-post-nld-{use_nld_result}'
         wandb.init(
             project=WANDB_TRAINING_PROJECT_NAME,
             entity=WANDB_ENTITY,
             config=cfg.to_dict(),
-            name=cfg.description
+            name=job_name,
         )
 
     checkpoint_dir = training_model_save_dir / cfg.description
-    if not debug:
+    
+    if use_nld_result is None:
+        del_utter_list = None
+    elif use_nld_result == 'confidence':
+        del_utter_list = checkpoint_dir / 'nld-confidence-detected-noisy-files-final.txt'
+    elif use_nld_result == 'distance':
+        del_utter_list = checkpoint_dir / 'nld-distance-detected-noisy-files-final.txt'
+    
+    if del_utter_list is not None:
+        assert del_utter_list.exists() and del_utter_list.is_file()
+
+    if not debug and use_nld_result is None:
         checkpoint_dir.mkdir(exist_ok=True)
         cfg.to_json(checkpoint_dir / 'config.json')
         print(f'Checkpoints will be saved to `{checkpoint_dir}`')
@@ -48,7 +64,10 @@ def train(
     embedder_net = cfg.forge_model(data_processing_config.nmels, utterance_classes_num).to(device)
     criterion = cfg.forge_criterion(utterance_classes_num).to(device)
 
-    train_dataset = SpeakerDataset(cfg.M, vox1_mel_spectrogram_dir, vox2_mel_spectrogram_dir, mislabeled_json_file)
+    train_dataset = SpeakerDataset(
+        cfg.M, vox1_mel_spectrogram_dir, vox2_mel_spectrogram_dir,
+        mislabeled_json_file, del_utter_list
+    )
     train_data_loader = DataLoader(
         train_dataset,
         # Note that the real batch size = N * M
@@ -132,19 +151,36 @@ def train(
                     break
                 if (not debug) and total_iterations % save_interval == 0:
                     iteration_string = str(total_iterations).zfill(len(str(cfg.iterations)))
-                    torch.save(embedder_net.state_dict(), checkpoint_dir / f'model-{iteration_string}.pth')
-                    torch.save(criterion.state_dict(), checkpoint_dir / f'loss-{iteration_string}.pth')
+                    if use_nld_result is None:
+                        torch.save(embedder_net.state_dict(), checkpoint_dir / f'model-{iteration_string}.pth')
+                        torch.save(criterion.state_dict(), checkpoint_dir / f'loss-{iteration_string}.pth')
+                    else:
+                        torch.save(
+                            embedder_net.state_dict(),
+                            checkpoint_dir / f'model-post-nld-{use_nld_result}-{iteration_string}.pth'
+                        )
+                        torch.save(
+                            criterion.state_dict(),
+                            checkpoint_dir / f'loss-post-nld-{use_nld_result}-{iteration_string}.pth'
+                        )
 
             if not debug:
                 wandb.log({'Loss': total_loss / local_iterations})
 
     if not debug:
-        torch.save(embedder_net.state_dict(), checkpoint_dir / 'model-final.pth')
-        torch.save(criterion.state_dict(), checkpoint_dir / 'loss-final.pth')
+        if use_nld_result is None:
+            torch.save(embedder_net.state_dict(), checkpoint_dir / 'model-final.pth')
+            torch.save(criterion.state_dict(), checkpoint_dir / 'loss-final.pth')
+        else:
+            torch.save(embedder_net.state_dict(), checkpoint_dir / f'model-post-nld-{use_nld_result}-final.pth')
+            torch.save(criterion.state_dict(), checkpoint_dir / f'loss-post-nld-{use_nld_result}-final.pth')
         wandb.finish()
 
 
-def test(test_config: TestConfig, vox1test_mel_spectrogram_dir: Path, debug: bool):
+def test(
+    test_config: TestConfig, vox1test_mel_spectrogram_dir: Path,
+    use_nld_result: Optional[Literal['confidence', 'distance']], debug: bool
+):
     device = torch.device('cuda' if cuda_is_available() else 'cpu')
     training_config = TrainConfig.from_json(test_config.model_dir / 'config.json')
     set_random_seed_to(
@@ -166,18 +202,23 @@ def test(test_config: TestConfig, vox1test_mel_spectrogram_dir: Path, debug: boo
         pin_memory=True,
     )
 
-    missing_keys, unexpected_keys = embedder_net.load_state_dict(
-        torch.load(test_config.model_dir / f'model-{test_config.iteration}.pth')
-    )
-    if len(missing_keys) != 0 or len(unexpected_keys) != 0:
-        raise ValueError()
+    if use_nld_result is None:
+        model_name = f'model-{test_config.iteration}.pth'
+    else:
+        model_name = f'model-post-nld-{use_nld_result}-{test_config.iteration}.pth'
+    embedder_net.load_state_dict(torch.load(test_config.model_dir / model_name))
+    
 
     if not debug:
+        if use_nld_result is None:
+            job_name = f'{training_config.description}-{test_config.iteration}'
+        else:
+            job_name = f'{training_config.description}-{use_nld_result}-{test_config.iteration}'
         wandb.init(
             project=WANDB_TESTING_PROJECT_NAME,
             entity=WANDB_ENTITY,
             config=test_config.to_dict(),
-            name=f'{training_config.description}-{test_config.iteration}',
+            name=job_name,
             reinit=True,
         )
 

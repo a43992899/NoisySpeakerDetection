@@ -53,7 +53,7 @@
       ]
     },
     {
-      "name": "Training Debug",
+      "name": "Training",
       "type": "python",
       "request": "launch",
       "program": "${workspaceFolder}",
@@ -61,21 +61,24 @@
       "justMyCode": true,
       "args": [
         "train",
-        "CE",
-        "20",
+        "AAMSC",
+        "75",
         "Permute",
         "--N",
-        "16",
+        "256",
         "--M",
-        "16",
+        "1",
         "--s",
         "15",
         "--m",
         "0.1",
         "--K",
-        "3",
-        "--iteration",
-        "100"
+        "10",
+        "--use-nld-result", "distance",
+        "--random-seed", "0",
+        // "--iteration",
+        // "100",
+        // "--debug"
       ]
     },
     {

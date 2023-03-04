@@ -27,7 +27,7 @@ class SpeakerDataset(Dataset):
     def __init__(
         self, sample_num: int, ood_mel_dir: Optional[Path],
         main_mel_dir: Path, mislabel_json: Optional[Path],
-        del_utter_json: Optional[Path] = None
+        del_utter_list: Optional[Path] = None
     ) -> None:
         super().__init__()
 
@@ -44,11 +44,23 @@ class SpeakerDataset(Dataset):
                 self.mislabel_mapper = json.load(f)            
         
         self.del_utter_mapper = dict()
-        if del_utter_json is not None:
-            with open(del_utter_json, 'r') as f:
-                self.del_utter_mapper = json.load(f)
+        if del_utter_list is not None:
+            with open(del_utter_list, 'r') as f:
+                self.del_utter_mapper = set([line.strip() for line in f.readlines()])
 
         self.get_spkr2utter()
+
+        self.empty_spkr = set()
+        self.not_empty_spkr = set()
+        if del_utter_list is not None:
+            self.get_empty_spkr()
+    
+    def get_empty_spkr(self):
+        for spkr_name, utter_list in self.spkr_name2utter_mislabel.items():
+            if len(utter_list) == 0:
+                self.empty_spkr.add(spkr_name)
+            else:
+                self.not_empty_spkr.add(spkr_name)
 
     def get_spkr2utter(self):
         """
@@ -114,6 +126,11 @@ class SpeakerDataset(Dataset):
 
     def __getitem__(self, idx: int):
         selected_spkr = self.spkr_id2name[idx]
+
+        # handle empty speaker (reassign)
+        if selected_spkr in self.empty_spkr:
+            selected_spkr = random.sample(self.not_empty_spkr, 1)[0]
+
         if self.spkr_name2utter_mislabel is None:
             all_utters_of_selected_spkr = self.spkr_name2utter[selected_spkr]
         else:
