@@ -199,7 +199,9 @@ def compute_confidence_inconsistency(
             if train_config.loss in ('AAM', 'AAMSC'):
                 assert isinstance(criterion, (AAMSoftmax, SubcenterArcMarginProduct))
                 model_output = criterion.directly_predict(model_output)
-                # model_output = softmax(model_output, dim=-1)
+                # adding this line will result in a wierd distribution 
+                # but helps with the precision. feel free to comment it out
+                model_output = softmax(model_output, dim=-1)
             inconsistencies = np.concatenate([
                 inconsistencies, (1 - y * model_output).min(dim=-1)[0].detach().cpu().numpy()
             ], dtype=np.float32)
